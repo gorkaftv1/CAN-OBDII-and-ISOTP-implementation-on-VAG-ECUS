@@ -1,0 +1,259 @@
+\documentclass[oneside,12pt]{book}
+\usepackage[utf8]{inputenc}
+\usepackage{standalone}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{lmodern}
+\usepackage{float}
+\usepackage[spanish]{babel}
+\usepackage{csquotes}
+\usepackage[figurename=Ilustración]{caption}
+\usepackage[numbers]{natbib}
+\usepackage{ragged2e}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{parskip}
+\usepackage{listings}
+\usepackage{epigraph}
+\usepackage{lipsum} % Texto de relleno en plantilla
+
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+% Glosario de términos - BEGIN
+\usepackage{glossaries}
+
+\makeglossaries
+
+\newglossaryentry{latex}
+{
+    name=latex,
+    description={Is a markup language specially suited 
+    for scientific documents}
+}
+
+\newglossaryentry{maths}
+{
+    name=mathematics,
+    description={Mathematics is what mathematicians do}
+}
+% Glosario de términos - END
+
+%\usepackage{fancyhdr}
+\usepackage{geometry}
+\usepackage{color}\usepackage{graphicx,xcolor}
+
+\renewcommand{\lstlistingname}{Algoritmo}
+%\renewcommand{\lstlistlistingnam%e}{Índice de~\lstlistingname s}
+
+\floatname{algorithm}{Algoritmo}
+\renewcommand{\listalgorithmname}{Índice de~\lstlistingname s}
+
+
+\lstset{
+        basicstyle=\fontsize{7}{11}\ttfamily,
+        language=Java,
+        captionpos=b,
+}
+
+\usepackage{titlesec}
+\setcounter{secnumdepth}{3}
+\titleformat{\chapter}[display]
+{\normalfont\huge\bfseries}{\chaptertitlename\ \thechapter}{20pt}{\Huge}
+
+\urlstyle{same}
+\title{Diseño y desarrollo de un sistema empotrado basado en bus CAN con acceso inalámbrico para la monitorización de un vehículo automóvil}
+\author{Gorka Eymard Santana Cabrera}
+\date{Curso 2025 - 2026}
+\renewcommand{\contentsname}{Contenido}
+\renewcommand{\figurename}{Ilustración}
+\usepackage{pifont}
+\renewcommand\labelitemi{\ding{52}}
+
+\begin{document}
+%\maketittle
+\input{Portada.tex}
+
+\input{TFT04C.tex}
+
+\newpage
+\pagenumbering{roman}
+{\Large{\textbf{Agradecimientos}}}
+\input{Agradecimientos.tex}
+
+\clearpage
+\input{Resumen.tex}
+\tableofcontents
+
+%\addcontentsline{toc}{section}{Listings}
+%\lstlistoflistings
+\listofalgorithms 
+
+\listoffigures
+
+\listoftables
+
+
+\clearpage
+\pagenumbering{arabic}
+
+\chapter{Introducción}
+\input{Introduccion.tex}
+
+Ejemplo para el glosario de términos (ver al final del documento):
+
+This final report has been produced using \Gls{latex}, a tool specially suitable for technical documents that include \gls{maths}. 
+
+\chapter{Estado actual y objetivos iniciales}
+%\input{EstadoDelArte.tex}
+Este es un CAPÍTULO \textbf{OBLIGATORIO}.
+
+\section{Motivación y antecedentes}
+
+Descripción de la motivación inicial y el estado actual en la temática concreta del trabajo.
+
+\section{Objetivos}
+
+Desglose de los \textbf{objetivos} inicialmente previstos en el TFT01. Opcionalmente, pueden adelantarse las desviaciones que hayan podido producirse con respecto a esos objetivos iniciales.
+
+NOTA: deben evitarse expresiones con referencias directas a formularios del tipo ``en el TFT01 ...'', puesto que cuando la memoria sea consultada fuera del entorno de la EII no serán identificables. Deben sustituirse por ``en la propuesta inicial ...''.
+
+\chapter{Aportaciones del trabajo}
+\chaptermark{Competencias, aportaciones y ODS}
+%\input{Competencias.tex}
+Este es un CAPÍTULO \textbf{OBLIGATORIO}.
+
+También pueden incluirse parte de estos contenidos en las conclusiones, en la descripción de los objetivos o en forma de anexos.
+
+\section{Principales aportaciones}
+
+Justificar qué es lo que este TFT \textbf{aporta} a nuestro entorno socio-económico, técnico o científico. Repercusión esperada.
+
+\section{Competencias específicas}
+
+Indicar, sólo para las \textbf{competencias específicas} relacionadas de forma más directa con el trabajo desarrollado, cómo se han cubierto con este TFT.
+
+\section{Alineamiento con los objetivos de desarrollo sostenible}
+
+\begin{table}[!htbp]
+\caption{Grado de relación del TFT con los objetivos de desarrollo sostenible.}
+\label{tab:ODS}
+\centering
+\begin{tabular}{|l|c|c|c|c|}
+\cline{1-5}
+  & \multicolumn{4}{c|}{Grado de relación} \\ \cline{2-5} 
+ ODS & 0 & 1 & 2 & 3 \\
+  & No procede & Bajo & Medio & Alto \\  
+  \cline{1-5} 
+1 Fin de la Pobreza & & & & \\ \cline{1-5}
+2 Hambre cero & & & & \\
+\cline{1-5}
+3 Salud y Bienestar & & & & \\
+\cline{1-5}
+4 Educación de calidad & & & & \\
+\cline{1-5}
+5 Igualdad de género & & & & \\
+\cline{1-5}
+6 Agua limpia y saneamiento & & & & \\
+\cline{1-5}
+7 Energía Asequible y no contaminante & & & & \\
+\cline{1-5}
+8 Trabajo decente y crecimiento económico & & & & \\
+\cline{1-5}
+9 Industria, Innovación e Infraestructuras & & & & \\
+\cline{1-5}
+10 Reducción de las desigualdades & & & & \\
+\cline{1-5}
+11 Ciudades y comunidades sostenibles & & & & \\
+\cline{1-5}
+12 Producción y consumo sostenibles & & & & \\
+\cline{1-5} 
+13 Acción por el clima & & & & \\
+\cline{1-5}
+14 Vida submarina & & & & \\
+\cline{1-5}
+15 Vida de ecosistemas terrestres & & & & \\
+\cline{1-5}
+16 Paz, justicia e instituciones sólidas & & & & \\
+\cline{1-5}
+17 Alianzas para lograr objetivos & & & & \\
+\cline{1-5}
+\end{tabular}%
+\end{table}
+
+Justificar el alineamiento del TFT con los \textbf{ODS} con los que presente un mayor grado de relación, en función de lo indicado en la tabla~\ref{tab:ODS}.
+
+\chapter{Desarrollo}
+%\input{Desarrollo.tex}
+Este es un CAPÍTULO \textbf{OBLIGATORIO}.
+
+\section{Metodología}
+
+Descripción de la \textbf{Metodología} aplicada a lo largo del trabajo y justificación de la elección.
+
+\section{Fases de desarrollo}
+
+Desarrollo del trabajo en sus distintas fases (por ejemplo, para una metodología en cascada: análisis, diseño, implementación, validación). Deberán comentarse especialmente las decisiones de diseño tomadas y la selección de las herramientas empleadas.
+
+Si el trabajo incluye software desarrollado, deberán seleccionarse las secciones más relevantes del mismo y comentarlas en la memoria.
+
+Ajuste a la planificación inicialmente prevista.
+
+Modificación en los objetivos planteados.
+
+\chapter{Resultados}
+%\input{Resultados.tex}
+
+Presentación de los resultados del trabajo. Repercusión.
+
+\chapter{Conclusiones y trabajo futuro}
+%\input{Conclusiones.tex}
+Este es un CAPÍTULO \textbf{OBLIGATORIO}.
+
+\section{Conclusiones}
+
+Valoración de resultados, grado de consecución de los  objetivos.
+
+\section{Trabajo futuro}
+
+Líneas de trabajo futuro, aspectos pendientes, posibles extensiones.
+
+\section{Uso de la IA}
+
+Indicar el uso que se ha hecho de la IA tanto en la elaboración de este documento como en el desarrollo del TFG.
+
+\vspace{1cm}
+
+\textbf{EXTENSIÓN DE LA MEMORIA:}
+
+\begin{itemize}
+    \item GII, GIFM, DGII-ADE (parte de GII): entre 50 y 100 páginas
+    \item GCID: entre 75 y 100 páginas
+\end{itemize}
+
+\chapter{Otros capítulos y anexos}
+
+El documento debe terminar con las \textbf{referencias bibliográficas} (SECCIÓN \textbf{OBLIGATORIA}). Después pueden incluirse \textbf{anexos} de forma opcional.
+
+\section{Ejemplos de capítulos opcionales}
+
+Dependiendo del tipo de trabajo, se podrían incluir, en el orden que corresponda, capítulos adicionales como los siguientes:
+
+\begin{description}
+\item{REQUISITOS}
+\item{NORMATIVA Y LEGISLACIÓN} incluir la legislación vigente que afecte al TFT (ley de protección de datos, leyes sobre seguridad, ...)
+\item{ASPECTOS ECONÓMICOS Y TEMPORALES}
+\item{DISEÑO}
+\item{RESULTADOS EXPERIMENTALES}
+\item{MANUAL  DE  USUARIO  Y  SOFTWARE}  deberán  incluirse  obligatoriamente  en  la  memoria  los extractos más relevantes   del código desarrollado. Siempre que sea posible, deberá   proporcionarse acceso a un repositorio software.
+\end{description}
+
+
+\bibliography{ref}
+\bibliographystyle{apalike}
+\clearpage
+
+\printglossaries
+
+\end{document}

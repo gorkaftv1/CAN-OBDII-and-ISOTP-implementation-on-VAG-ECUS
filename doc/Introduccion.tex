@@ -1,0 +1,89 @@
+
+%Préambulo de la historia de las aplicaciones Android (?)
+\epigraph{Si quiero poner una frase célebre}{Nombre de persona sabia}
+%\lipsum[2]
+
+En la introducción debería ir el \textbf{contexto} general del trabajo, conceptos básicos, motivación, ...
+
+En general, cada capítulo suele incluir una breve cabecera que indica el propósito del mismo. En este capítulo se trata ...
+
+Al tratarse de un documento técnico, el estilo de redacción debe ser el adecuado. Evitando el uso de la primera persona o el lenguaje coloquial.
+
+\vspace{1cm}
+
+\textbf{EXTENSIÓN DE LA MEMORIA:}
+
+\begin{itemize}
+    \item GII, GIFM, DGII-ADE (parte de GII): entre 50 y 100 páginas
+    \item GCID: entre 75 y 100 páginas
+\end{itemize}
+
+\section{Ejemplo de sección - estilo de citas}
+
+Así se cita una referencia bibliográfica~\cite{Castrillon11-mva}, o la tabla~\ref{tab:floors} o la figura~\ref{fig:logos}.
+
+\subsection{Ejemplo de sub-sección}
+
+No deben utilizarse niveles adicionales (sub-sub-secciones).
+
+Si hay texto que se ha copiado literalmente de algún sitio, hay que entrecomillarlo ``En un lugar de La Mancha, de cuyo nombre no quiero acordarme'' y \textbf{citar} el origen (Andrés Iniesta).
+
+\begin{table}[!htbp]
+\caption{Ejemplo de tabla blablabla.}
+\label{tab:floors}
+\centering
+\begin{tabular}{|l|c|c|c|c|c|}
+\cline{1-6}
+ & \multicolumn{5}{c|}{Gallery} \\ \cline{1-6} 
+ & Floor & 0 & 1 & 2 & 3 \\ \cline{2-6} 
+ & 0 & 98.5 / 98.9 & 92.2 / 92.2 & 77.4 / 77.4 & 80.7 / 81.9 \\ \cline{2-2}
+Probe & 1 & 91.5 / 92.2 & 98.3 / 98.6 & 83.5 / 85.2& 80.7 / 81.1 \\ \cline{2-2}
+ & 2 & 69.3 / 69.3 / 69.7 & 83.5 / 84.4 & 94.8 / 97.8 & 75.8 /80.2 \\ \cline{2-2}
+ & 2 & 69.3 / 69.3 / 69.7 & 83.5 / 84.4 & 94.8 / 97.8 & 75.8 /80.2 \\ \cline{2-2}
+ & 2 & 69.3 / 69.3 / 69.7 & 83.5 / 84.4 & 94.8 / 97.8 & 75.8 /80.2 \\ \cline{2-2}
+ & 2 & 69.3 / 69.3 / 69.7 & 83.5 / 84.4 / 84.4 & 94.8 / 97.8 & 75.8/ 80.2 \\ \cline{2-2}
+ & 3 & 66.5 / 67.4 / 68.3 & 72.7 / 72.7 / 73.0 & 76.3 / 80.1 & 97.8 / 99.4 \\ \cline{1-6}
+\end{tabular}%
+\end{table}
+
+Todas las figuras/ilustraciones o cuadros/tablas deben estar comentadas en el texto. No es adecuado usarlas como parte de la redacción, lo que se muestra en el pie debe ser un resumen de lo que ya se describe en el documento. Tampoco deben emplearse referencias del tipo, ``en la figura que se muestra a continuación'' o ``en la tabla anterior'', hay que usar referencias indexadas que no dependan de la posición. Un ejemplo de esto sería: ``La ilustración \ref{fig:logos} muestra el logo de la Escuela".
+
+\begin{figure}[!bp]
+\centering
+\includegraphics[width=0.5\textwidth]{Ilustraciones/Logo_EII+ULPGC.png}
+\caption{Logo vertical de la EII y la ULPGC [indicar crédito si no es una figura propia. Internet o Google como buscador no es una fuente, habría que citar el origen concreto]}
+\label{fig:logos}
+\end{figure}
+
+
+\begin{algorithm} 
+%\begin{lstlisting}
+\caption{Pseudocódigo con comentarios.}\label{alg:cap}
+\begin{algorithmic}
+\Require $n \geq 0$
+\Ensure $y = x^n$
+\State $y \gets 1$
+\State $X \gets x$
+\State $N \gets n$
+\While{$N \neq 0$}
+\If{$N$ is even}
+    \State $X \gets X \times X$
+    \State $N \gets \frac{N}{2}$  \Comment{This is a comment}
+\ElsIf{$N$ is odd}
+    \State $y \gets y \times X$
+    \State $N \gets N - 1$
+\EndIf
+\EndWhile
+\end{algorithmic}
+\end{algorithm}
+%\end{lstlisting}
+
+
+\section{Ejemplo de sección - organización del documento}
+
+Al final de la introducción suele describirse la estructura del documento, indicando los capítulos que vienen a continuación y una frase corta describiendo su contenido. ``El resto del documento está integrado por los capítulos correspondientes al análisis de requisitos del trabajo, el capítulo dedicado al diseño de la aplicación, ... y finalmente las conclusiones que se han derivado del trabajo.''
+
+En el caso del \textbf{doble grado}, lo ideal es dividir la memoria en dos partes separadas, una para cada grado, después de la introducción. También deberá incluirse una guía de lectura, indicando qué capítulos/secciones son comunes y cuáles exclusivos de cada grado, para facilitar la corrección de los correspondientes tribunales.
+
+La estructura que se propone a continuación es simplemente orientativa, aunque sí deben incluirse de alguna manera las \textbf{partes obligatorias}, que son los capítulos de \textbf{motivación y objetivos, competencias, aportaciones y alineamiento ODS, desarrollo, conclusiones y bibliografía}.
+

@@ -1,0 +1,9 @@
+# requirements.txt
+
+# CAN bus y transporte ISO-TP (solo necesario en Raspberry Pi)
+python-can==4.4.2
+can-isotp==2.0.3
+
+# Testing
+pytest==8.3.5
+pytest-cov==6.0.0
