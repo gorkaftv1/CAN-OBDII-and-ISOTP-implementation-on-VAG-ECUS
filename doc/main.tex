@@ -74,20 +74,20 @@
 %\maketittle
 \input{Portada.tex}
 
-\input{TFT04C.tex}
+%\input{TFT04C.tex}
 
 \newpage
 \pagenumbering{roman}
-{\Large{\textbf{Agradecimientos}}}
-\input{Agradecimientos.tex}
+%{\Large{\textbf{Agradecimientos}}}
+%\input{Agradecimientos.tex}
 
-\clearpage
+%\clearpage
 \input{Resumen.tex}
 \tableofcontents
 
 %\addcontentsline{toc}{section}{Listings}
 %\lstlistoflistings
-\listofalgorithms 
+%\listofalgorithms 
 
 \listoffigures
 
@@ -100,25 +100,14 @@
 \chapter{Introducción}
 \input{Introduccion.tex}
 
-Ejemplo para el glosario de términos (ver al final del documento):
-
-This final report has been produced using \Gls{latex}, a tool specially suitable for technical documents that include \gls{maths}. 
-
 \chapter{Estado actual y objetivos iniciales}
 %\input{EstadoDelArte.tex}
 Este es un CAPÍTULO \textbf{OBLIGATORIO}.
-
 \section{Motivación y antecedentes}
 
-Descripción de la motivación inicial y el estado actual en la temática concreta del trabajo.
-
-La motivación inicial para el desarrollo de este trabajo ha sido el interés en el mundo de la automoción y la monitorización de vehículos, así como la necesidad de contar con herramientas que permitan acceder a los datos de los vehículos de forma completamente inalámbrica.
+La motivación para el desarrollo de este trabajo surge de la curiosidad por estudiar la serie de protocolos que se usan en el sector automovilistico donde se trabaja en un entorno de comunicaciónes críticas y ruidosas, donde se requiere una alta fidelidad en la transmisión de datos.
 
 \section{Objetivos}
-
-Desglose de los \textbf{objetivos} inicialmente previstos en el TFT01. Opcionalmente, pueden adelantarse las desviaciones que hayan podido producirse con respecto a esos objetivos iniciales.
-
-NOTA: deben evitarse expresiones con referencias directas a formularios del tipo ``en el TFT01 ...'', puesto que cuando la memoria sea consultada fuera del entorno de la EII no serán identificables. Deben sustituirse por ``en la propuesta inicial ...''.
 
 El objetivo del desarrollo de este proyecto, es diseñar y desarrollar un sistema empotrado basado en bus CAN con acceso inalámbrico para la monitorización de un vehículo automóvil perteneciente al grupo de automoción VAG. Con el fin de tener una herramienta de monitorización y evaluación de los parámetros del vehiculo, que permita el acceso a los datos de forma inalámbrica, y que pueda ser utilizada para la mejora del rendimiento del vehículo, la detección de fallos y el mantenimiento predictivo.
 
@@ -254,9 +243,50 @@ Dependiendo del tipo de trabajo, se podrían incluir, en el orden que correspond
 \end{description}
 
 
-\bibliography{ref}
-\bibliographystyle{apalike}
 \clearpage
+
+\begin{thebibliography}{9}
+
+\bibitem{Bosch91-can}
+Robert Bosch GmbH,
+\textit{CAN Specification Version 2.0},
+Robert Bosch GmbH, Stuttgart, 1991.
+
+\bibitem{ISO11898-1-15}
+International Organization for Standardization,
+\textit{ISO 11898-1:2015 -- Road vehicles -- Controller area network (CAN) --
+Part 1: Data link layer and physical signalling},
+ISO, Ginebra, 2015.
+
+\bibitem{ISO15765-2-16}
+International Organization for Standardization,
+\textit{ISO 15765-2:2016 -- Road vehicles -- Diagnostic communication over
+Controller Area Network (DoCAN) -- Part 2: Transport protocol and
+network layer services},
+ISO, Ginebra, 2016.
+
+\bibitem{SAE-J1979-12}
+Society of Automotive Engineers,
+\textit{SAE J1979:2012 -- E/E Diagnostic Test Modes},
+SAE International, Warrendale, 2012.
+
+\bibitem{ISO14229-1-20}
+International Organization for Standardization,
+\textit{ISO 14229-1:2020 -- Road vehicles -- Unified diagnostic services (UDS) --
+Part 1: Application layer},
+ISO, Ginebra, 2020.
+
+\bibitem{Menager23-isotp}
+S. Ménager \textit{et al.},
+\textit{python-can-isotp Documentation},
+2023. Disponible en: \url{https://can-isotp.readthedocs.io/}
+
+\bibitem{Twiss23-pythoncan}
+python-can contributors,
+\textit{python-can Documentation},
+2023. Disponible en: \url{https://python-can.readthedocs.io/}
+
+\end{thebibliography}
 
 \printglossaries
 
