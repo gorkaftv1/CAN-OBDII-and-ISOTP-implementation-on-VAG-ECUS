@@ -1,8 +1,12 @@
 # requirements.txt
 
-# CAN bus y transporte ISO-TP (solo necesario en Raspberry Pi)
+# CAN bus y transporte ISO-TP (solo necesario en Raspberry Pi con SocketCAN)
 python-can==4.4.2
 can-isotp==2.0.3
+
+# Bluetooth Classic SPP/RFCOMM (solo necesario en Raspberry Pi)
+# Prerequisito del sistema: sudo apt install libbluetooth-dev bluez
+PyBluez2==0.46
 
 # Testing
 pytest==8.3.5
