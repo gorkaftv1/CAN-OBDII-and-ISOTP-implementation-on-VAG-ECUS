@@ -120,6 +120,42 @@
 #define VIN_LENGTH         17
 #define ENGINE_TYPE_MPI    0x01  // 1.4 MPI (BXW) — inyección multipunto, NA
 
+// ---------- PARÁMETROS DE RUIDO SENSOR (realismo ECU real) ----------
+// Amplitudes de jitter gaussiano/uniforme por PID — basadas en
+// tolerancias típicas del 1.4 MPI BXW en banco de pruebas.
+#define NOISE_RPM_MAX        25    // ±25 RPM (oscilación ralentí BXW)
+#define NOISE_COOLANT_MAX     1    // ±1 °C (sensor NTC resolución 1°)
+#define NOISE_OIL_MAX         1    // ±1 °C
+#define NOISE_INTAKE_MAX      1    // ±1 °C
+#define NOISE_MAF_MAX         8    // ±8 cuentas raw (~0.08 g/s)
+#define NOISE_THROTTLE_MAX    1    // ±1% (potenciómetro TPS)
+#define NOISE_VOLTAGE_MAX    30    // ±30 mV (12.45V ± 0.03V)
+#define NOISE_FUEL_TRIM_MAX   1    // ±1% short fuel trim
+#define NOISE_BARO_MAX        0    // Sin ruido (sensor absoluto estable)
+
+// ---------- PARÁMETROS DE RUIDO CAN BUS ----------
+// Simulan condiciones reales del bus: latencia variable, pérdida de tramas,
+// tráfico de otras ECUs y respuestas negativas esporádicas.
+// Controlables en tiempo de ejecución con el comando serial NOISE <0|1>.
+#define CAN_NOISE_DROP_PCT         2   // % respuestas que se pierden (→ timeout en escáner)
+#define CAN_NOISE_NRC_PCT          1   // % peticiones que devuelven NRC 0x22 esporádeo
+#define CAN_NOISE_LATENCY_MIN_MS   1   // Latencia mínima de respuesta (ms)
+#define CAN_NOISE_LATENCY_MAX_MS  15   // Latencia máxima de respuesta (ms)
+#define CAN_NOISE_BG_TRAFFIC_PCT  30   // % de ciclos de loop() que inyectan tráfico fondo
+
+// IDs CAN de tráfico de fondo — típicos bus VAG PQ25:
+//   0x280 — broadcast motor (velocidad ruedas, acelerador)
+//   0x480 — ABS/ESP (velocidades individuales ruedas)
+//   0x320 — Cuadro de instrumentos (velocímetro, odómetro)
+//   0x520 — Climatización (temperatura consigna, estado compresor)
+#define CAN_BG_ID_COUNT   4
+static const uint32_t CAN_BG_IDS[CAN_BG_ID_COUNT] = {0x280, 0x480, 0x320, 0x520};
+
+// ---------- INTERVALO DE ACTUALIZACIÓN ----------
+// Valor por defecto (ms). Configurable en runtime con comando RATE <ms>.
+// El Arduino actualiza la simulación cada SIM_UPDATE_INTERVAL_DEFAULT ms.
+#define SIM_UPDATE_INTERVAL_DEFAULT  200  // 200 ms (era 1000 ms en v1)
+
 // Valores simulados del vehículo
 struct VehicleData {
   // Datos generales

@@ -69,6 +69,7 @@
 
 #include <CAN.h>
 #include "ECU_protocol.h"
+#include "serial_commands.h"
 
 // ---------- VARIABLES GLOBALES ----------
 VehicleData vehicle;
@@ -90,8 +91,15 @@ bool keyOn = false;                     // Estado actual del contacto (true = ON
 uint8_t responseBuffer[7];   // máx 7 bytes: límite de payload en un SF ISO-TP
 uint8_t responseLength = 0;
 
+// ---------- VARIABLES DE CONTROL RUNTIME ----------
+bool     canNoiseEnabled  = false;               // Ruido CAN bus (activar con NOISE 1)
+uint16_t updateInterval   = SIM_UPDATE_INTERVAL_DEFAULT; // Intervalo simulación (ms)
+ScenarioState activeScenario = SCENARIO_NONE;    // Escenario de conducción activo
+SerialCmdContext serialCtx;                       // Contexto del parser serial
+
 // ---------- PROTOTIPOS PRIVADOS ----------
 void     handleIgnitionButton();
+void     generateBackgroundTraffic();
 void     sendResponse();
 void     sendNegativeResponse(uint8_t mode, uint8_t errorCode);
 void     sendVINMultiFrame();
@@ -155,9 +163,12 @@ void setup() {
   
   // Inicializar datos del vehículo
   initVehicleData();
-  
+
   // Inicializar DTCs de ejemplo
   initDTCs();
+
+  // Inicializar contexto del parser de comandos serial
+  initSerialCmdContext(&serialCtx);
 
   // Configurar botón de arranque con interrupción hardware
   // El botón conecta D7 a GND: flanco FALLING = pulsación
@@ -168,6 +179,7 @@ void setup() {
   Serial.println(ENGINE_START_PIN);
 
   Serial.println(F("\n[INFO] ECU lista para recibir comandos"));
+  Serial.println(F("[INFO] Comandos serial: THR|SPD|IGN|DTC ADD|DTC CLR|STATUS|RATE|NOISE|SCENARIO"));
   Serial.print(F("[INFO] VIN: "));
   Serial.println(vehicle.vin);
   Serial.print(F("[INFO] Escuchando en ID: 0x"));
@@ -179,16 +191,23 @@ void setup() {
 
 // ---------- LOOP PRINCIPAL ----------
 void loop() {
-  // Procesar el botón de arranque antes de cualquier otra cosa
+  // 1. Procesar el botón de arranque
   handleIgnitionButton();
 
-  // Actualizar simulación de datos del vehículo
+  // 2. Procesar comandos serial (PC/RPi → Arduino)
+  processSerialCommands(&serialCtx, &vehicle, dtcList, &numStoredDTCs,
+                        &keyOn, &canNoiseEnabled, &updateInterval, &activeScenario);
+
+  // 3. Actualizar simulación de datos del vehículo
   updateVehicleSimulation();
-  
-  // Procesar mensajes CAN entrantes
+
+  // 4. Inyectar tráfico CAN de fondo (si ruido activo)
+  generateBackgroundTraffic();
+
+  // 5. Procesar mensajes CAN entrantes
   processCANMessages();
-  
-  // Pequeño delay para no saturar
+
+  // Pequeño delay para no saturar el bus
   delay(10);
 }
 
@@ -196,10 +215,10 @@ void loop() {
 
 void initVehicleData() {
   // VIN típico SEAT Ibiza (17 caracteres)
-  strcpy(vehicle.vin, "VSSZZZ6JZCR123456");
+  strcpy(vehicle.vin, "VSSZZZ6JZDR040608");
   
   vehicle.engineType = ENGINE_TYPE_MPI;  // 1.4 MPI (BXW)
-  vehicle.odometer = 85000;  // 85,000 km
+  vehicle.odometer = 40608;   // km aproximados según bastidor DR=2013
   
   // Valores iniciales (motor apagado)
   vehicle.engineLoad = 0;
@@ -210,12 +229,12 @@ void initVehicleData() {
   vehicle.intakeTemp = 20;
   vehicle.mafFlow = 0;
   vehicle.throttlePos = 0;
-  vehicle.fuelLevel = 65;  // 65% de combustible
+  vehicle.fuelLevel = 70;      // 70% — valor neutro de prueba
   vehicle.fuelRailPressure = 0;
-  vehicle.batteryVoltage = 12450;  // 12.45V
+  vehicle.batteryVoltage = 12450;    // 12.45V — batería en reposo
   vehicle.oilTemp = 20;
-  vehicle.ambientTemp = 18;
-  vehicle.barometricPressure = 101;  // kPa (nivel del mar)
+  vehicle.ambientTemp = 22;          // Las Palmas de GC, temperatura media
+  vehicle.barometricPressure = 101;  // kPa — nivel del mar (Las Palmas)
   
   vehicle.checkEngine = false;
   vehicle.numDTCs = 0;
@@ -245,15 +264,31 @@ void initDTCs() {
 }
 
 // ---------- SIMULACIÓN DE DATOS ----------
+/*
+  updateVehicleSimulation() — llama a:
+    1. advanceScenario()  → ajusta throttlePos según el escenario activo
+    2. Dinámica throttle→RPM (lag primer orden, tau≈0.3 pasos)
+    3. Dinámica RPM→Speed (modelo longitudinal simplificado)
+    4. Resto de parámetros correlacionados (load, MAF, timing…)
+    5. Ruido de sensor (mismos NOISE_*_MAX que antes)
+    6. Clamps físicos
+
+  Intervalo de actualización: variable 'updateInterval' (default 200ms).
+*/
 
 void updateVehicleSimulation() {
+  static unsigned long lastSimUpdate = 0;
   unsigned long currentTime = millis();
-  
-  // Actualizar cada segundo
-  if (currentTime - lastUpdate < 1000) return;
-  lastUpdate = currentTime;
-  
-  // Detectar si el motor está encendido (basado en RPM solicitados)
+
+  if (currentTime - lastSimUpdate < updateInterval) return;
+  uint16_t dtMs = (uint16_t)(currentTime - lastSimUpdate);  // tiempo real transcurrido
+  lastSimUpdate = currentTime;
+  lastUpdate    = currentTime;  // compatibilidad con código existente
+
+  // ── 1. Avance del escenario de conducción ──────────────────────────
+  advanceScenario(&activeScenario, &vehicle, dtMs);
+
+  // ── 2. Detectar estado motor ───────────────────────────────────────
   if (vehicle.rpm > 0 && !engineRunning) {
     engineRunning = true;
     engineStartTime = currentTime;
@@ -262,58 +297,95 @@ void updateVehicleSimulation() {
     engineRunning = false;
     Serial.println(F("[SIM] Motor apagado"));
   }
-  
+
   if (engineRunning) {
-    // Actualizar tiempo de funcionamiento
-    vehicle.runtimeSinceStart = (currentTime - engineStartTime) / 1000;
-    
-    // Simular calentamiento del motor
+    // ── 3. Dinámica Throttle → RPM (lag primer orden) ────────────────
+    // tau ≈ 0.3 × (updateInterval/200ms) para mantener la misma respuesta
+    // temporal independientemente del intervalo configurado.
+    int16_t targetRpm = (int16_t)map(vehicle.throttlePos, 0, 100, 850, 5500);
+    float alpha = 0.3f * ((float)dtMs / 200.0f);
+    if (alpha > 1.0f) alpha = 1.0f;
+    vehicle.rpm = (uint16_t)(vehicle.rpm + alpha * (targetRpm - (int16_t)vehicle.rpm));
+
+    // ── 4. Dinámica RPM → Speed (modelo longitudinal simplificado) ───
+    // Fuerza motriz proporcional a RPM y load; resistencia proporcional a v².
+    // Coeficientes empíricos para velocidad máxima ~160 km/h a plena carga.
+    // fuerza_neta [un/paso] = k_traccion*(rpm*load/100) - k_resistencia*v²
+    float force = 0.00002f * (float)vehicle.rpm * (float)vehicle.engineLoad
+                - 0.003f   * (float)vehicle.speed * (float)vehicle.speed;
+    // Escalar por dt para independencia del intervalo (referencia: 200ms)
+    force *= ((float)dtMs / 200.0f);
+    int16_t newSpeed = (int16_t)vehicle.speed + (int16_t)force;
+    vehicle.speed = (uint8_t)constrain(newSpeed, 0, 180);
+
+    // ── 5. Parámetros correlacionados ─────────────────────────────────
+    vehicle.engineLoad    = (uint8_t)map(vehicle.throttlePos, 0, 100, 15, 85);
+    vehicle.mafFlow       = (uint16_t)((vehicle.rpm * vehicle.engineLoad) / 500);
+    vehicle.timingAdvance = (int8_t)map(vehicle.rpm, 800, 6000, 8, 32);
+    vehicle.fuelRailPressure = 30;  // MPI: 300 kPa regulada, constante
+
+    // Calentamiento motor
     if (vehicle.coolantTemp < 90) {
       vehicle.coolantTemp += random(1, 4);
       if (vehicle.coolantTemp > 90) vehicle.coolantTemp = 90;
     }
-    
     if (vehicle.oilTemp < 95) {
       vehicle.oilTemp += random(1, 3);
       if (vehicle.oilTemp > 95) vehicle.oilTemp = 95;
     }
-    
-    // Simular variaciones realistas (1.4 MPI BXW: ralentí 850, límite ~6000 rpm)
-    if (vehicle.rpm > 800) {
-      vehicle.rpm += random(-50, 50);
-      if (vehicle.rpm < 800) vehicle.rpm = 800;
-      if (vehicle.rpm > 6000) vehicle.rpm = 6000;
-    } else {
-      vehicle.rpm = 850;  // Ralentí 1.4 MPI
-    }
-    
-    // Carga del motor
-    vehicle.engineLoad = map(vehicle.throttlePos, 0, 100, 15, 85);
-    
-    // MAF flow basado en RPM y carga
-    vehicle.mafFlow = (vehicle.rpm * vehicle.engineLoad) / 500;
-    
-    // Avance de encendido (gasolina MPI: rango más amplio que diésel)
-    vehicle.timingAdvance = map(vehicle.rpm, 800, 6000, 8, 32);
-
-    // Presión línea combustible (MPI: regulada ~300 kPa, no varía con RPM)
-    // PID 0x23 codifica: valor_raw * 10 = kPa  →  30 * 10 = 300 kPa
-    vehicle.fuelRailPressure = 30;
-    
-    // Temperatura admisión sube ligeramente
     if (vehicle.intakeTemp < vehicle.ambientTemp + 15) {
       vehicle.intakeTemp++;
     }
-    
+
+    // Alternador
+    if (vehicle.batteryVoltage < 13800) {
+      vehicle.batteryVoltage += 50;
+    }
+
+    // Consumo combustible (decrece lentamente con carga)
+    // ~1% cada 30 pasos a plena carga; a ralentí apenas consume
+    static uint8_t fuelTick = 0;
+    if (++fuelTick >= (uint8_t)(30 - vehicle.engineLoad / 5)) {
+      fuelTick = 0;
+      if (vehicle.fuelLevel > 0) vehicle.fuelLevel--;
+    }
+
+    // Tiempo de funcionamiento
+    vehicle.runtimeSinceStart = (currentTime - engineStartTime) / 1000;
+
+    // ── 6. Ruido de sensor ────────────────────────────────────────────
+    vehicle.rpm            += random(-NOISE_RPM_MAX,       NOISE_RPM_MAX + 1);
+    vehicle.coolantTemp    += random(-NOISE_COOLANT_MAX,   NOISE_COOLANT_MAX + 1);
+    vehicle.oilTemp        += random(-NOISE_OIL_MAX,       NOISE_OIL_MAX + 1);
+    vehicle.intakeTemp     += random(-NOISE_INTAKE_MAX,    NOISE_INTAKE_MAX + 1);
+    vehicle.mafFlow        += random(-NOISE_MAF_MAX,       NOISE_MAF_MAX + 1);
+    vehicle.batteryVoltage += random(-NOISE_VOLTAGE_MAX,   NOISE_VOLTAGE_MAX + 1);
+    vehicle.shortFuelTrim1 += random(-NOISE_FUEL_TRIM_MAX, NOISE_FUEL_TRIM_MAX + 1);
+
+    // ── 7. Clamps físicos ─────────────────────────────────────────────
+    vehicle.rpm            = constrain(vehicle.rpm,            750,  6500);
+    vehicle.coolantTemp    = constrain(vehicle.coolantTemp,    -40,   130);
+    vehicle.oilTemp        = constrain(vehicle.oilTemp,        -40,   150);
+    vehicle.intakeTemp     = constrain(vehicle.intakeTemp,     -40,    80);
+    vehicle.batteryVoltage = constrain(vehicle.batteryVoltage, 13800, 14400);
+    vehicle.throttlePos    = constrain(vehicle.throttlePos,    0,    100);
+    vehicle.shortFuelTrim1 = constrain(vehicle.shortFuelTrim1, -100,  99);
+    if ((int16_t)vehicle.mafFlow < 0) vehicle.mafFlow = 0;
+
   } else {
     // Motor apagado
     vehicle.runtimeSinceStart = 0;
-    vehicle.rpm = 0;
-    vehicle.engineLoad = 0;
-    vehicle.mafFlow = 0;
-    vehicle.fuelRailPressure = 0;
-    vehicle.timingAdvance = 0;
-    
+    vehicle.rpm               = 0;
+    vehicle.engineLoad        = 0;
+    vehicle.mafFlow           = 0;
+    vehicle.fuelRailPressure  = 0;
+    vehicle.timingAdvance     = 0;
+
+    // Deceleración cuando motor apagado (freno rodadura)
+    if (vehicle.speed > 0) {
+      vehicle.speed = (uint8_t)constrain((int16_t)vehicle.speed - 2, 0, 255);
+    }
+
     // Enfriamiento lento
     if (vehicle.coolantTemp > vehicle.ambientTemp) {
       vehicle.coolantTemp -= random(0, 2);
@@ -324,7 +396,37 @@ void updateVehicleSimulation() {
     if (vehicle.intakeTemp > vehicle.ambientTemp) {
       vehicle.intakeTemp--;
     }
+
+    // Bajada gradual al voltaje de batería en reposo (~12.45V)
+    if (vehicle.batteryVoltage > 12600) {
+      vehicle.batteryVoltage -= 20;
+    }
+    vehicle.batteryVoltage = constrain(vehicle.batteryVoltage, 12200, 12600);
   }
+}
+
+// ---------- TRÁFICO CAN DE FONDO ----------
+/*
+  Inyecta tramas CAN de otras ECUs del bus VAG PQ25 para simular
+  el tráfico real que un escáner vería al conectarse al vehículo.
+  Solo actúa cuando canNoiseEnabled == true.
+  Probabilidad: CAN_NOISE_BG_TRAFFIC_PCT % de los ciclos de loop().
+*/
+void generateBackgroundTraffic() {
+  if (!canNoiseEnabled) return;
+  if (random(0, 100) >= CAN_NOISE_BG_TRAFFIC_PCT) return;
+
+  uint8_t  idx  = (uint8_t)random(0, CAN_BG_ID_COUNT);
+  uint32_t bgId = CAN_BG_IDS[idx];
+
+  uint8_t frame[8];
+  for (uint8_t i = 0; i < 8; i++) {
+    frame[i] = (uint8_t)random(0, 256);
+  }
+
+  CAN.beginPacket(bgId);
+  CAN.write(frame, 8);
+  CAN.endPacket();
 }
 
 // ---------- PROCESAMIENTO CAN (ISO-TP) ----------
@@ -388,6 +490,25 @@ void processCANMessages() {
   Serial.print(mode, HEX);
   Serial.print(F(" | PID: 0x"));
   Serial.println(pid, HEX);
+
+  // ── Ruido CAN bus: simula condiciones reales del bus ────────────────
+  if (canNoiseEnabled) {
+    // 1. Latencia de respuesta variable (jitter ECU real)
+    delay(random(CAN_NOISE_LATENCY_MIN_MS, CAN_NOISE_LATENCY_MAX_MS + 1));
+
+    // 2. Drop aleatorio: no enviar nada (~2%) → timeout en escáner
+    if (random(0, 100) < CAN_NOISE_DROP_PCT) {
+      Serial.println(F("[NOISE] Respuesta dropped (simulacion timeout)"));
+      return;
+    }
+
+    // 3. NRC esporádico: condiciones no correctas (~1%)
+    if (random(0, 100) < CAN_NOISE_NRC_PCT) {
+      Serial.println(F("[NOISE] NRC 0x22 inyectado"));
+      sendNegativeResponse(mode, NRC_CONDITIONS_NOT_CORRECT);
+      return;
+    }
+  }
 
   // ── Despachar por modo ────────────────────────────────────────────
   bool handled = false;
