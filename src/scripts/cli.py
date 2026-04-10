@@ -5,6 +5,7 @@ Run directly:
 
 The menu operates against MockTransport by default, which faithfully
 replicates the Arduino ECU simulator without requiring physical CAN hardware.
+All operations are logged to diagnostics.db (SQLite) in the current directory.
 """
 
 from __future__ import annotations
@@ -20,15 +21,18 @@ from config.obd_pids import PIDS
 from core.exceptions import DiagnosticTimeoutError, InvalidResponseError, NrcException
 from core.models.monitor_sample import MonitorSample
 from infraestructure.decoder.obd2_decoder import Obd2DataDecoder
+from infraestructure.logging.sqlite_logger import SqliteDataLogger
 from infraestructure.protocol.obd2_builder import Obd2ProtocolBuilder
 from infraestructure.transport.isotp_transport import IsoTpTransport
+from infraestructure.transport.logging_transport import LoggingTransport
 from monitor.live_data_monitor import LiveDataMonitor
 from session.diagnostic_session import DiagnosticSession
+from session.logged_diagnostic_session import LoggedDiagnosticSession
 
 _BANNER = """\
 ╔══════════════════════════════════════════════╗
 ║  SEAT Ibiza 6J 2012 — OBD-II Diagnostic Tool ║
-║  Mode: SIMULATOR (MockTransport)             ║
+║  Logging: diagnostics.db                     ║
 ╚══════════════════════════════════════════════╝"""
 
 _SEP = "─" * 48
@@ -51,7 +55,7 @@ _MONITOR_PID_SET = frozenset(_MONITOR_PIDS)
 # Menu option handlers
 # ---------------------------------------------------------------------------
 
-def _option_live_data(session: DiagnosticSession) -> None:
+def _option_live_data(session: LoggedDiagnosticSession) -> None:
     rows = [
         ("RPM",          session.get_engine_rpm(),          "rpm"),
         ("Coolant Temp", session.get_coolant_temp(),        "°C"),
@@ -64,7 +68,7 @@ def _option_live_data(session: DiagnosticSession) -> None:
         print(f"  {label:<22} : {value:>8.2f} {unit}")
 
 
-def _option_extended_live_data(session: DiagnosticSession) -> None:
+def _option_extended_live_data(session: LoggedDiagnosticSession) -> None:
     print(_SEP)
     transport = session._transport
     for pid_def in PIDS.values():
@@ -74,7 +78,7 @@ def _option_extended_live_data(session: DiagnosticSession) -> None:
         print(f"  {pid_def.name:<30} : {value:>8.2f} {pid_def.unit}")
 
 
-def _option_read_dtcs(session: DiagnosticSession) -> None:
+def _option_read_dtcs(session: LoggedDiagnosticSession) -> None:
     dtcs = session.get_dtcs()
     print(_SEP)
     if not dtcs:
@@ -84,7 +88,7 @@ def _option_read_dtcs(session: DiagnosticSession) -> None:
             print(f"  [{dtc.code}]  {dtc.description}")
 
 
-def _option_clear_dtcs(session: DiagnosticSession) -> None:
+def _option_clear_dtcs(session: LoggedDiagnosticSession) -> None:
     print(_SEP)
     answer = input("  Clear all DTCs? (y/N): ")
     if answer.strip().lower() == "y":
@@ -94,13 +98,18 @@ def _option_clear_dtcs(session: DiagnosticSession) -> None:
         print("  Cancelled.")
 
 
-def _option_read_vin(session: DiagnosticSession) -> None:
+def _option_read_vin(session: LoggedDiagnosticSession) -> None:
     vin = session.get_vin()
     print(_SEP)
     print(f"  VIN: {vin}")
 
 
-def _option_live_monitor(session: DiagnosticSession) -> None:
+def _option_live_monitor(
+    session: LoggedDiagnosticSession,
+    logger: SqliteDataLogger,
+    session_id: int,
+    log_transport: LoggingTransport,
+) -> None:
     import threading
 
     latest: dict[int, MonitorSample] = {}
@@ -117,6 +126,8 @@ def _option_live_monitor(session: DiagnosticSession) -> None:
         sys.stdout.flush()
 
     def on_sample(s: MonitorSample) -> None:
+        # Loguear muestra en SQLite
+        logger.log_sample(session_id, s)
         with lock:
             latest[s.pid] = s
             samples_this_cycle[0] += 1
@@ -128,7 +139,7 @@ def _option_live_monitor(session: DiagnosticSession) -> None:
         print(f"  [WARN] PID 0x{pid:02X}: {exc}")
 
     monitor = LiveDataMonitor(
-        transport=session._transport,
+        transport=log_transport,
         decoder=Obd2DataDecoder(),
         pid_ids=_MONITOR_PID_SET,
         interval_ms=500,
@@ -145,23 +156,22 @@ def _option_live_monitor(session: DiagnosticSession) -> None:
 # Main menu loop
 # ---------------------------------------------------------------------------
 
-_HANDLERS = {
-    "1": _option_live_data,
-    "2": _option_extended_live_data,
-    "3": _option_read_dtcs,
-    "4": _option_clear_dtcs,
-    "5": _option_read_vin,
-    "6": _option_live_monitor,
-}
+def run_menu(
+    session: LoggedDiagnosticSession,
+    logger: SqliteDataLogger,
+    session_id: int,
+    log_transport: LoggingTransport,
+) -> None:
+    """Run the interactive menu loop until the user selects 0."""
+    handlers = {
+        "1": lambda: _option_live_data(session),
+        "2": lambda: _option_extended_live_data(session),
+        "3": lambda: _option_read_dtcs(session),
+        "4": lambda: _option_clear_dtcs(session),
+        "5": lambda: _option_read_vin(session),
+        "6": lambda: _option_live_monitor(session, logger, session_id, log_transport),
+    }
 
-
-def run_menu(session: DiagnosticSession) -> None:
-    """Run the interactive menu loop until the user selects 0.
-
-    Args:
-        session: An open :class:`~session.diagnostic_session.DiagnosticSession`
-            to use for all diagnostic operations.
-    """
     while True:
         print()
         print(_MENU)
@@ -171,13 +181,13 @@ def run_menu(session: DiagnosticSession) -> None:
             print("  Goodbye.")
             break
 
-        handler = _HANDLERS.get(choice)
+        handler = handlers.get(choice)
         if handler is None:
             print("  Unknown option — please enter a number between 0 and 6.")
             continue
 
         try:
-            handler(session)
+            handler()
         except (NrcException, DiagnosticTimeoutError, InvalidResponseError) as e:
             print(f"  [ERROR] {e}")
 
@@ -189,8 +199,23 @@ def run_menu(session: DiagnosticSession) -> None:
 if __name__ == "__main__":
     print(_BANNER)
 
-    transport = IsoTpTransport(channel="can0", tx_id=0x7E0, rx_id=0x7E8)
-    session = DiagnosticSession(transport, Obd2ProtocolBuilder(), Obd2DataDecoder())
+    # Capa de transporte + logging decorator
+    raw_transport = IsoTpTransport(channel="can0", tx_id=0x7E0, rx_id=0x7E8)
+    log_transport = LoggingTransport(raw_transport)
 
-    with session:
-        run_menu(session)
+    # Logger SQLite
+    logger = SqliteDataLogger("diagnostics.db")
+    session_id = logger.start_session("CLI session")
+    print(f"  [LOG] Session #{session_id} started → diagnostics.db")
+
+    # Sesión diagnóstica con logging
+    inner_session = DiagnosticSession(log_transport, Obd2ProtocolBuilder(), Obd2DataDecoder())
+    session = LoggedDiagnosticSession(inner_session, logger, session_id, log_transport)
+
+    try:
+        with session:
+            run_menu(session, logger, session_id, log_transport)
+    finally:
+        logger.end_session(session_id)
+        logger.close()
+        print(f"  [LOG] Session #{session_id} closed.")
