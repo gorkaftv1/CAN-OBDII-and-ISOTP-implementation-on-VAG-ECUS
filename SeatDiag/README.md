@@ -1,6 +1,6 @@
 # SeatDiag — App React Native
 
-App Android para diagnóstico OBD-II del SEAT Ibiza 6J 2012. Se conecta a la Raspberry Pi por Bluetooth Classic (SPP/RFCOMM) y muestra un dashboard en tiempo real con los datos del CAN bus.
+App Android e iOS para diagnóstico OBD-II del SEAT Ibiza 6J 2012. Se conecta a la Raspberry Pi por Bluetooth Low Energy (BLE) usando el perfil Nordic UART Service y muestra un dashboard en tiempo real con los datos del CAN bus.
 
 ---
 
@@ -36,16 +36,12 @@ Antes de arrancar la app, la Pi tiene que estar corriendo el servidor.
 sudo apt install libbluetooth-dev bluez
 sudo systemctl enable bluetooth
 sudo systemctl start bluetooth
-
-# Hacer la Pi visible y ponerle nombre
-sudo hciconfig hci0 piscan
-sudo hciconfig hci0 name "SEAT_DIAG_PI"
 ```
 
 ### 1.2 Instalar dependencias Python
 
 ```bash
-pip install PyBluez2
+pip install bless
 ```
 
 ### 1.3 Arrancar el servidor
@@ -63,7 +59,7 @@ El servidor imprime en consola:
 
 ### 1.4 Emparejar la Pi con el móvil
 
-En el móvil: **Ajustes → Bluetooth → Buscar dispositivos** → seleccionar `SEAT_DIAG_PI`. Solo hace falta hacerlo una vez.
+Con BLE **no hace falta emparejar previamente** desde los ajustes del móvil. La app escanea y conecta directamente al dispositivo BLE `SEAT_DIAG`.
 
 ---
 
@@ -127,23 +123,25 @@ Gráfica temporal de los valores registrados. Usa el selector de PID para cambia
 
 ---
 
-## 4. Verificar que la conexión funciona (desde PC)
+## 4. Verificar que la conexión BLE funciona (desde PC)
 
-Si quieres probar el servidor sin la app, desde otro Linux:
+Con `bluetoothctl` en Linux puedes verificar que la Pi está anunciando el servicio:
 
 ```bash
-# Emparejar primero con la Pi
 bluetoothctl
   scan on
-  pair <MAC_PI>
-  connect <MAC_PI>
+  # Debe aparecer: [NEW] Device XX:XX:XX:XX:XX:XX SEAT_DIAG
+  connect XX:XX:XX:XX:XX:XX
+  # Listar servicios GATT:
+  gatt.list-attributes XX:XX:XX:XX:XX:XX
+```
 
-# Conectar por RFCOMM
-rfcomm connect hci0 <MAC_PI>
+O con `gatttool`:
 
-# En otra terminal, enviar un comando
-echo '{"cmd": "snapshot"}' > /dev/rfcomm0
-cat /dev/rfcomm0
+```bash
+# Escribir un comando en RX (UUID: 6E400002...)
+gatttool -b XX:XX:XX:XX:XX:XX --char-write-req \
+  --handle=<handle_RX> --value=$(echo -n '{"cmd":"vin"}\n' | xxd -p)
 ```
 
 ---
@@ -152,9 +150,9 @@ cat /dev/rfcomm0
 
 | Síntoma | Causa probable | Solución |
 |---------|---------------|----------|
-| "No hay dispositivos" en el escaneo | Permisos BT no concedidos | Conceder permisos de Bluetooth y Ubicación en Ajustes → Aplicaciones → SeatDiag |
-| La Pi no aparece en el escaneo | No emparejada o no visible | Ejecutar `sudo hciconfig hci0 piscan` en la Pi |
-| Fallo de conexión RFCOMM | Servidor no arrancado | Comprobar que `python scripts/server.py` está corriendo |
+| "No hay dispositivos" en el escaneo | Permisos BLE no concedidos | Conceder BLUETOOTH_SCAN y BLUETOOTH_CONNECT en Ajustes → Aplicaciones → SeatDiag |
+| La Pi no aparece en el escaneo | Servidor no arrancado o BlueZ no activo | Comprobar que `python scripts/server.py` está corriendo en la Pi |
+| Fallo de conexión BLE | Fuera de rango o servidor caído | La Pi debe estar a menos de ~10m sin obstáculos metálicos |
 | Dashboard sin datos | Monitor no arrancó | Reiniciar la app; el monitor arranca automáticamente al entrar al dashboard |
 | Crash al abrir app | Falta `android/` nativo | Ver sección de compilación más abajo |
 
@@ -195,7 +193,7 @@ SeatDiag/
 
 | Librería | Uso |
 |---------|-----|
-| `react-native-bluetooth-classic` | Bluetooth SPP/RFCOMM |
+| `react-native-ble-plx` | Bluetooth Low Energy (BLE/GATT) |
 | `react-native-svg` | Gauges SVG |
 | `react-native-chart-kit` | Gráficas históricas |
 | `@react-navigation/native-stack` | Navegación entre pantallas |

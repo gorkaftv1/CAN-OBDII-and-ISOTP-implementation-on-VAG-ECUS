@@ -11,7 +11,7 @@
   "dependencies": {
     "react": "18.3.1",
     "react-native": "0.75.4",
-    "react-native-bluetooth-classic": "^1.73.0-rc.8",
+    "react-native-ble-plx": "^3.4.0",
     "react-native-svg": "^15.8.0",
     "react-native-chart-kit": "^6.12.0",
     "@react-navigation/native": "^7.0.0",

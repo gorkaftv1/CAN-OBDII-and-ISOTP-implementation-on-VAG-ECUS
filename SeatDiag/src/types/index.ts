@@ -45,7 +45,7 @@ export type ServerMessage =
 // Tipos de navegación
 export type RootStackParamList = {
   Scan: undefined;
-  Connecting: { deviceName: string; deviceAddress: string };
+  Connecting: { deviceName: string; deviceId: string };
   Dashboard: undefined;
   Dtc: undefined;
   History: undefined;

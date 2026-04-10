@@ -1,5 +1,5 @@
 /**
- * ConnectingScreen — Pantalla 2: conectando a la Pi por Bluetooth RFCOMM.
+ * ConnectingScreen — Pantalla 2: conectando a la Pi por BLE.
  */
 
 import React, { useEffect } from 'react';
@@ -13,7 +13,6 @@ import {
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
-import RNBluetoothClassic from 'react-native-bluetooth-classic';
 import { bluetoothService } from '../services/BluetoothService';
 import type { RootStackParamList } from '../types';
 
@@ -23,24 +22,14 @@ type Route = RouteProp<RootStackParamList, 'Connecting'>;
 export function ConnectingScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
-  const { deviceName, deviceAddress } = route.params;
+  const { deviceName, deviceId } = route.params;
 
   useEffect(() => {
     let cancelled = false;
 
     async function doConnect() {
       try {
-        const devices = await RNBluetoothClassic.getBondedDevices();
-        const target = devices.find(d => d.address === deviceAddress);
-        if (!target) {
-          // Intentar con el address directo aunque no esté en bonded
-          const all = await bluetoothService.discover();
-          const found = all.find(d => d.address === deviceAddress);
-          if (!found) throw new Error('Dispositivo no encontrado');
-          await bluetoothService.connect(found);
-        } else {
-          await bluetoothService.connect(target);
-        }
+        await bluetoothService.connect(deviceId);
         if (!cancelled) {
           navigation.replace('Dashboard');
         }
@@ -48,7 +37,7 @@ export function ConnectingScreen() {
         if (!cancelled) {
           Alert.alert(
             'Error de conexión',
-            e.message,
+            e.message ?? String(e),
             [{ text: 'Volver', onPress: () => navigation.goBack() }],
           );
         }
@@ -57,7 +46,7 @@ export function ConnectingScreen() {
 
     doConnect();
     return () => { cancelled = true; };
-  }, [deviceAddress, navigation]);
+  }, [deviceId, navigation]);
 
   return (
     <View style={styles.container}>

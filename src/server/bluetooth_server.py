@@ -1,160 +1,181 @@
-"""Servidor Bluetooth SPP (Serial Port Profile) para la Raspberry Pi.
+"""Servidor BLE GATT para la Raspberry Pi.
 
-Expone el bus CAN/OBD-II al móvil a través de Bluetooth Classic RFCOMM.
-El protocolo de aplicación es NDJSON (un objeto JSON por línea).
+Expone el bus CAN/OBD-II a la app móvil usando Bluetooth Low Energy (BLE)
+con el perfil Nordic UART Service (NUS). Compatible con Android e iOS.
+
+UUIDs NUS:
+    Service : 6E400001-B5A3-F393-E0A9-E50E24DCCA9E
+    RX char : 6E400002-B5A3-F393-E0A9-E50E24DCCA9E  (app → Pi, write)
+    TX char : 6E400003-B5A3-F393-E0A9-E50E24DCCA9E  (Pi → app, notify)
 
 Prerequisitos en la Raspberry Pi (una sola vez):
     sudo apt install libbluetooth-dev bluez
-    sudo systemctl enable bluetooth
-    sudo hciconfig hci0 piscan
-    sudo hciconfig hci0 name "SEAT_DIAG_PI"
+    pip install bless
 
-Dependencias Python:
-    pip install PyBluez2
+Protocolo de aplicación: NDJSON (un objeto JSON por línea terminada en '\\n').
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
-import threading
-import socket as _socket
+import logging
 
 try:
-    import bluetooth  # type: ignore[import]
-    _BT_AVAILABLE = True
+    from bless import (  # type: ignore[import]
+        BlessServer,
+        BlessGATTCharacteristic,
+        GATTCharacteristicProperties,
+        GATTAttributePermissions,
+    )
+    _BLESS_AVAILABLE = True
 except ImportError:
-    _BT_AVAILABLE = False
+    _BLESS_AVAILABLE = False
 
-from core.interfaces.i_data_logger import IDataLogger
-from core.interfaces.i_diagnostic_session import IDiagnosticSession
-from core.interfaces.i_transport import ITransport
 from server.bt_command_handler import BtCommandHandler
 
-# UUID estándar del Serial Port Profile (SPP)
-_SPP_UUID = "00001101-0000-1000-8000-00805F9B34FB"
-_BT_PORT = bluetooth.PORT_ANY if _BT_AVAILABLE else 1
-_SERVICE_NAME = "SEAT_DIAG"
-_RECV_BUFFER = 4096
+logger = logging.getLogger(__name__)
+
+# ── UUIDs Nordic UART Service ──────────────────────────────────────────────
+_NUS_SERVICE = "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
+_NUS_RX      = "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"  # app → Pi (write)
+_NUS_TX      = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"  # Pi → app (notify)
+
+_BLE_NAME = "SEAT_DIAG"
+_MTU      = 512  # bytes máx por notificación; se fragmenta si hay más
 
 
-class BluetoothDiagServer:
+class BLEDiagServer:
     """
-    Servidor Bluetooth que acepta una conexión RFCOMM a la vez.
+    Servidor BLE GATT basado en asyncio.
 
-    Al conectar un cliente:
-      - Crea un BtCommandHandler con la sesión diagnóstica y el logger.
-      - Lee NDJSON del socket, despacha al handler, envía la respuesta.
-      - Al desconectar el cliente, para el monitor si estaba activo
-        y vuelve a escuchar conexiones.
+    Crea un peripheral con el perfil NUS. La app escribe comandos NDJSON
+    en la característica RX y recibe respuestas por notificaciones en TX.
 
     Uso::
 
-        server = BluetoothDiagServer(session, logger, session_id, transport, lock)
-        server.start()   # blocking hasta Ctrl+C
+        server = BLEDiagServer(handler)
+        asyncio.run(server.start())   # blocking hasta Ctrl+C
     """
 
-    def __init__(
-        self,
-        session: IDiagnosticSession,
-        logger: IDataLogger,
-        session_id: int,
-        transport: ITransport,
-        transport_lock: threading.Lock,
-    ) -> None:
-        if not _BT_AVAILABLE:
+    def __init__(self, handler: BtCommandHandler) -> None:
+        if not _BLESS_AVAILABLE:
             raise RuntimeError(
-                "PyBluez2 no está instalado. Ejecuta: pip install PyBluez2"
+                "bless no está instalado. Ejecuta: pip install bless"
             )
-        self._session = session
-        self._logger = logger
-        self._session_id = session_id
-        self._transport = transport
-        self._lock = transport_lock
-        self._running = False
+        self._handler = handler
+        self._server: BlessServer | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._recv_buf: str = ""
+        self._stop_event: asyncio.Event | None = None
 
     # ── Ciclo de vida ──────────────────────────────────────────────────
 
-    def start(self) -> None:
-        """Bloquea hasta que se recibe KeyboardInterrupt."""
-        server_sock = bluetooth.BluetoothSocket(bluetooth.RFCOMM)
-        server_sock.bind(("", _BT_PORT))
-        server_sock.listen(1)
+    async def start(self) -> None:
+        """Arrancar el servidor BLE. Bloquea hasta KeyboardInterrupt o stop()."""
+        self._loop = asyncio.get_event_loop()
+        self._stop_event = asyncio.Event()
 
-        port = server_sock.getsockname()[1]
-        bluetooth.advertise_service(
-            server_sock,
-            _SERVICE_NAME,
-            service_id=_SPP_UUID,
-            service_classes=[_SPP_UUID, bluetooth.SERIAL_PORT_CLASS],
-            profiles=[bluetooth.SERIAL_PORT_PROFILE],
+        self._server = BlessServer(name=_BLE_NAME, loop=self._loop)
+        self._server.read_request_func  = self._on_read
+        self._server.write_request_func = self._on_write
+
+        # Servicio NUS
+        await self._server.add_new_service(_NUS_SERVICE)
+
+        # RX: la app escribe aquí (comandos JSON)
+        await self._server.add_new_characteristic(
+            _NUS_SERVICE,
+            _NUS_RX,
+            GATTCharacteristicProperties.write
+            | GATTCharacteristicProperties.write_without_response,
+            None,
+            GATTAttributePermissions.writeable,
         )
 
-        print(f"[BT] Escuchando en RFCOMM canal {port} — servicio '{_SERVICE_NAME}'")
-        print("[BT] Esperando conexión Bluetooth...")
-
-        self._running = True
-        try:
-            while self._running:
-                try:
-                    client_sock, client_info = server_sock.accept()
-                except OSError:
-                    break
-                print(f"[BT] Conexión desde {client_info}")
-                self._handle_client(client_sock)
-                print(f"[BT] Cliente desconectado. Esperando nueva conexión...")
-        except KeyboardInterrupt:
-            print("\n[BT] Servidor detenido.")
-        finally:
-            server_sock.close()
-
-    def stop(self) -> None:
-        self._running = False
-
-    # ── Manejo de cliente ──────────────────────────────────────────────
-
-    def _handle_client(self, sock) -> None:
-        """Loop de lectura/escritura para un cliente conectado."""
-        recv_buf = ""
-
-        def push(data: dict) -> None:
-            try:
-                sock.send((json.dumps(data) + "\n").encode())
-            except OSError:
-                pass
-
-        handler = BtCommandHandler(
-            session=self._session,
-            logger=self._logger,
-            session_id=self._session_id,
-            transport=self._transport,
-            transport_lock=self._lock,
-            push_callback=push,
+        # TX: la Pi notifica aquí (respuestas + samples en streaming)
+        await self._server.add_new_characteristic(
+            _NUS_SERVICE,
+            _NUS_TX,
+            GATTCharacteristicProperties.notify,
+            None,
+            GATTAttributePermissions.readable,
         )
 
+        await self._server.start()
+        print(f"[BLE] Anunciando '{_BLE_NAME}' — esperando conexión...")
+
         try:
-            while True:
-                chunk = sock.recv(_RECV_BUFFER)
-                if not chunk:
-                    break
-                recv_buf += chunk.decode(errors="replace")
-
-                # Procesar todas las líneas completas del buffer
-                while "\n" in recv_buf:
-                    line, recv_buf = recv_buf.split("\n", 1)
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        cmd = json.loads(line)
-                    except json.JSONDecodeError as e:
-                        push({"status": "error", "message": f"JSON inválido: {e}"})
-                        continue
-
-                    response = handler.handle(cmd)
-                    push(response)
-
-        except OSError:
+            await self._stop_event.wait()
+        except (KeyboardInterrupt, asyncio.CancelledError):
             pass
         finally:
-            handler.stop_monitor()
-            sock.close()
+            await self._server.stop()
+            self._handler.stop_monitor()
+            print("[BLE] Servidor detenido.")
+
+    def stop(self) -> None:
+        """Parar el servidor desde cualquier hilo."""
+        if self._stop_event and self._loop:
+            self._loop.call_soon_threadsafe(self._stop_event.set)
+
+    # ── Callbacks GATT ────────────────────────────────────────────────
+
+    def _on_read(self, characteristic: BlessGATTCharacteristic, **_) -> bytearray:
+        return characteristic.value or bytearray()
+
+    def _on_write(self, characteristic: BlessGATTCharacteristic, **_) -> None:
+        """Llamado desde el event loop cuando la app escribe en RX."""
+        if characteristic.uuid.upper() != _NUS_RX.upper():
+            return
+
+        chunk = (characteristic.value or b"").decode("utf-8", errors="replace")
+        self._recv_buf += chunk
+
+        while "\n" in self._recv_buf:
+            line, self._recv_buf = self._recv_buf.split("\n", 1)
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                cmd = json.loads(line)
+            except json.JSONDecodeError as exc:
+                self._notify_from_loop({"status": "error", "message": f"JSON inválido: {exc}"})
+                continue
+            # handle() es bloqueante (acceso CAN) → ejecutar en executor
+            assert self._loop is not None
+            asyncio.ensure_future(self._dispatch_async(cmd), loop=self._loop)
+
+    # ── Despacho y notificación ────────────────────────────────────────
+
+    async def _dispatch_async(self, cmd: dict) -> None:
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(None, self._handler.handle, cmd)
+        self._notify_from_loop(response)
+
+    def notify(self, data: dict) -> None:
+        """Notificar datos al cliente BLE. Puede llamarse desde cualquier hilo."""
+        if self._server is None or self._loop is None:
+            return
+        payload = (json.dumps(data) + "\n").encode()
+        chunks = [payload[i:i + _MTU] for i in range(0, len(payload), _MTU)]
+        self._loop.call_soon_threadsafe(self._send_chunks, chunks)
+
+    def _notify_from_loop(self, data: dict) -> None:
+        """Notificar desde dentro del event loop."""
+        payload = (json.dumps(data) + "\n").encode()
+        chunks = [payload[i:i + _MTU] for i in range(0, len(payload), _MTU)]
+        self._send_chunks(chunks)
+
+    def _send_chunks(self, chunks: list[bytes]) -> None:
+        assert self._server is not None
+        for chunk in chunks:
+            char = self._server.get_characteristic(_NUS_TX)
+            if char is None:
+                break
+            char.value = bytearray(chunk)
+            self._server.update_value(_NUS_SERVICE, _NUS_TX)
+
+
+# Alias para compatibilidad con server.py
+BluetoothDiagServer = BLEDiagServer

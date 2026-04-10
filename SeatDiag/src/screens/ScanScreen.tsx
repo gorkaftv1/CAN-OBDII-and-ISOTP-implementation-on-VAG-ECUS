@@ -1,8 +1,8 @@
 /**
- * ScanScreen — Pantalla 1: descubrimiento Bluetooth.
+ * ScanScreen — Pantalla 1: descubrimiento BLE.
  *
- * Muestra la lista de dispositivos BT disponibles.
- * Destaca el dispositivo "SEAT_DIAG_PI" y navega a ConnectingScreen al pulsarlo.
+ * Escanea dispositivos BLE que anuncian el Nordic UART Service.
+ * Destaca el dispositivo "SEAT_DIAG" y navega a ConnectingScreen al pulsarlo.
  */
 
 import React, { useState, useCallback } from 'react';
@@ -14,47 +14,72 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  Platform,
+  PermissionsAndroid,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { Device } from 'react-native-ble-plx';
 import { bluetoothService } from '../services/BluetoothService';
 import type { RootStackParamList } from '../types';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Scan'>;
 
-const TARGET_NAME = 'SEAT_DIAG_PI';
+const TARGET_NAME = 'SEAT_DIAG';
+
+async function requestAndroidBlePermissions(): Promise<boolean> {
+  if (Platform.OS !== 'android') return true;
+
+  if (Platform.Version >= 31) {
+    const results = await PermissionsAndroid.requestMultiple([
+      PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+      PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+    ]);
+    return Object.values(results).every(r => r === PermissionsAndroid.RESULTS.GRANTED);
+  }
+
+  // Android < 12
+  const result = await PermissionsAndroid.request(
+    PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+  );
+  return result === PermissionsAndroid.RESULTS.GRANTED;
+}
 
 export function ScanScreen() {
   const navigation = useNavigation<Nav>();
-  const [devices, setDevices] = useState<any[]>([]);
+  const [devices, setDevices] = useState<Device[]>([]);
   const [scanning, setScanning] = useState(false);
 
   const scan = useCallback(async () => {
     const enabled = await bluetoothService.isBluetoothEnabled();
     if (!enabled) {
-      const granted = await bluetoothService.requestEnable();
-      if (!granted) {
-        Alert.alert('Bluetooth requerido', 'Activa el Bluetooth para continuar.');
-        return;
-      }
+      Alert.alert('Bluetooth requerido', 'Activa el Bluetooth para continuar.');
+      return;
     }
+
+    const granted = await requestAndroidBlePermissions();
+    if (!granted) {
+      Alert.alert('Permisos requeridos', 'La app necesita permisos de Bluetooth para escanear.');
+      return;
+    }
+
     setScanning(true);
     setDevices([]);
     try {
-      const found = await bluetoothService.discover();
+      const found = await bluetoothService.scan();
       setDevices(found);
     } catch (e: any) {
-      Alert.alert('Error', e.message);
+      Alert.alert('Error al escanear', e.message ?? String(e));
     } finally {
       setScanning(false);
     }
   }, []);
 
   const connect = useCallback(
-    (device: any) => {
+    (device: Device) => {
       navigation.navigate('Connecting', {
-        deviceName: device.name ?? device.address,
-        deviceAddress: device.address,
+        deviceName: device.name ?? device.id,
+        deviceId: device.id,
       });
     },
     [navigation],
@@ -75,7 +100,7 @@ export function ScanScreen() {
 
       <FlatList
         data={devices}
-        keyExtractor={item => item.address}
+        keyExtractor={item => item.id}
         contentContainerStyle={styles.list}
         ListEmptyComponent={
           !scanning ? (
@@ -97,7 +122,7 @@ export function ScanScreen() {
                 <Text style={[styles.deviceName, isTarget && styles.deviceNameTarget]}>
                   {item.name ?? 'Dispositivo desconocido'}
                 </Text>
-                <Text style={styles.deviceAddress}>{item.address}</Text>
+                <Text style={styles.deviceAddress}>{item.id}</Text>
               </View>
               {isTarget && (
                 <View style={styles.targetBadge}>
