@@ -1,5 +1,42 @@
+# Python
 *__pycache__*
 .venv/
-*claude*
 *.log
+
+# Claude
+*claude*
+
+# Node / React Native
 node_modules/
+package-lock.json
+yarn.lock
+.npm
+.eslintcache
+*.jsbundle
+
+# Android / Gradle
+./seatDiag/android/app/debug/
+./seatDiag/android/app/release/
+./seatDiag/android/build/
+./seatDiag/android/.gradle/
+./seatDiag/android/local.properties
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# IDE
+.vscode/
+.idea/
+*.iml
+.DS_Store
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+
+# Temporary
+tmp/
+temp/
+.env.local
