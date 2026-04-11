@@ -1,3 +1,42 @@
+\section{Introducción a la Comunicación en el Sector Automovilístico}
+
+La evolución del sector automovilístico durante las últimas décadas se ha caracterizado
+ por una transición acelerada de sistemas puramente mecánicos a arquitecturas altamente
+ electronificadas. Los vehículos modernos no son solo máquinas de combustión o motores
+ eléctricos, sino complejas redes de computadoras sobre ruedas que albergan decenas de 
+ Unidades de Control Electrónico (ECU). Estas ECU gestionan todo, desde la inyección de
+combustible y los frenos ABS hasta el infoentretenimiento. Para que esta arquitectura distribuida funcione, es imperativo un sistema de comunicación robusto y en tiempo real. Es aquí donde surge el bus CAN (Controller Area Network). Desarrollado originalmente por la empresa Bosch en 1986 y estandarizado a nivel global en 1993 bajo la norma ISO 11898, el bus CAN nació para resolver el problema del cableado excesivo, permitiendo que múltiples microcontroladores y dispositivos se comuniquen entre sí sin depender de una computadora central, garantizando alta tolerancia al ruido electromagnético y priorización de mensajes críticos.\\
+
+\begin{figure}[!bp]
+\centering
+\includegraphics[width=0.5\textwidth]{Ilustraciones/CAN_Car.jpg}
+\caption{Imagen ilustrativa de un bus CAN en un vehículo, mostrando la interconexión entre varias ECU a través de un par de cables trenzados. Fuente: \url{https://serviciosdelautomovilarca.es/2021/02/07/sistema-can-bus-en-el-automovil/}.}
+\label{fig:CAN_CAR}
+\end{figure}
+
+
+A nivel técnico, el bus CAN es un protocolo de comunicaciones en serie de tipo diferencial, lo que significa que utiliza dos cables (CAN High y CAN Low) para transmitir la información, logrando una excelente inmunidad frente a interferencias electromagnéticas. Funciona bajo un paradigma multimaestro y utiliza un mecanismo de resolución de colisiones no destructivo basado en la prioridad del mensaje (CSMA/CD+AMP). En lugar de enviar información a direcciones específicas, el bus CAN transmite tramas o frames a toda la red. Cada trama contiene un identificador único; cuanto menor es el valor numérico de este identificador, mayor es la prioridad del mensaje en el bus. Esto asegura que la información crítica, como los comandos de frenado, tenga siempre preferencia sobre datos secundarios.\\
+
+\begin{table}[!htbp]
+\caption{Estructura de una Trama CAN Estándar 2.0A.}
+\label{tab:trama_can}
+\centering
+\begin{tabular}{|l|c|p{9cm}|}
+\hline
+\textbf{Campo} & \textbf{Bits} & \textbf{Descripción (Funcionamiento Básico)} \\ \hline
+\textbf{SOF} & 1 & \textit{Start of Frame}: Indica el inicio de la transmisión. \\ \hline
+\textbf{Identificador (ID)} & 11 & Define la prioridad y el contenido del mensaje. \\ \hline
+\textbf{RTR} & 1 & \textit{Remote Transmission Request}: Diferencia entre trama de datos o petición. \\ \hline
+\textbf{Control} & 6 & Indica la longitud de los datos que le siguen. \\ \hline
+\textbf{Datos} & 0 - 64 & La carga útil (hasta 8 bytes de información, p.ej., valor de RPM). \\ \hline
+\textbf{CRC / ACK / EOF} & Varios & Comprobación de errores, confirmación de recepción y fin de trama. \\ \hline
+\end{tabular}%
+\end{table}
+
+Aunque el bus CAN define cómo viajan los bits por los cables (las capas física y de enlace de datos del modelo OSI), no especifica el "idioma" de los datos en sí. Para que equipos de diagnóstico externos puedan interpretar universalmente la información del vehículo (como las RPM, la temperatura del refrigerante o los códigos de error), la industria adoptó protocolos estandarizados de la capa de aplicación. El más fundamental es el OBD-II (On-Board Diagnostics), obligatorio en Estados Unidos desde 1996 y en Europa (como EOBD) desde principios de los 2000. OBD-II define un conector físico estándar de 16 pines (SAE J1962) y un conjunto de identificadores de parámetros (PID) que cualquier herramienta puede solicitar. Con la llegada de los vehículos modernos, el estándar ISO 15765-4 dictaminó cómo deben encapsularse y enviarse estos mensajes OBD-II a través del bus CAN físico. Además, para diagnósticos más profundos a nivel de fabricante, la industria utiliza actualmente el estándar UDS (Unified Diagnostic Services, ISO 14229), que permite operaciones avanzadas como la lectura de variables propietarias o el flasheo de centralitas.
+
+
+
 \section{Introducción a los Protocolos de Comunicación}
 
 El sistema desarrollado en este TFT se apoya en una pila de protocolos estándar 
@@ -68,6 +107,3 @@ rechazo~\cite{ISO14229-1-20}. Se implementan seis NRCs, entre ellos \texttt{0x11
 (condiciones incorrectas, por ejemplo intentar borrar DTCs con el motor en marcha) y 
 \texttt{0x33} (acceso denegado por seguridad)~\cite{ISO14229-1-20}, dotando al 
 simulador de un comportamiento fiel al de una ECU real.
-
-
-\section{Ejemplo de sección - organización del documento}
