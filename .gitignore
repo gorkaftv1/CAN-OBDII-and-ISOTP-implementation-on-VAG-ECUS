@@ -8,22 +8,37 @@
 
 # Node / React Native
 node_modules/
-package-lock.json
-yarn.lock
 .npm
 .eslintcache
 *.jsbundle
 
-# Android / Gradle
-./seatDiag/android/app/debug/
-./seatDiag/android/app/release/
-./seatDiag/android/build/
-./seatDiag/android/.gradle/
-./seatDiag/android/local.properties
+# Android build artifacts & generated files
+seatDiag/android/build/
+seatDiag/android/.gradle/
+seatDiag/android/app/build/
+seatDiag/android/app/debug/
+seatDiag/android/app/release/
+seatDiag/android/.idea/
+seatDiag/android/local.properties
+seatDiag/android/**/.cxx/
+seatDiag/android/**/generated/
+
+# APK / AAB / Keystores (except debug keystore committed intentionally)
 *.apk
 *.aab
-*.keystore
 *.jks
+# Keep: seatDiag/android/app/debug.keystore is intentional in RN templates
+
+# iOS
+seatDiag/ios/Pods/
+seatDiag/ios/build/
+seatDiag/ios/*.xcworkspace/xcuserdata/
+seatDiag/ios/*.xcodeproj/xcuserdata/
+seatDiag/ios/DerivedData/
+
+# React Native metro cache
+.metro-health-check*
+.watchman*
 
 # IDE
 .vscode/
