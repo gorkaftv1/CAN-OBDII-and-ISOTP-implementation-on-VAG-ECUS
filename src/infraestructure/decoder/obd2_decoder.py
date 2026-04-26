@@ -69,67 +69,41 @@ class Obd2DataDecoder(IDataDecoder):
         )
 
     # ------------------------------------------------------------------ #
+    # Internal helpers                                                    #
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _check_length(raw: bytes, pid: int) -> None:
+        """Raise InvalidResponseError if raw is shorter than expected for pid."""
+        expected = _pids.PIDS[pid].response_bytes
+        if len(raw) < expected:
+            raise InvalidResponseError(
+                f"Response for PID 0x{pid:02X} too short: "
+                f"expected {expected} bytes, got {len(raw)} — raw: {bytes(raw).hex(' ').upper()}"
+            )
+
+    # ------------------------------------------------------------------ #
     # Mode 0x01 decoders — Live Data                                     #
     # ------------------------------------------------------------------ #
 
     def decode_rpm(self, raw: bytes) -> float:
-        """Decode Engine RPM using the SAE J1979 formula for PID 0x0C.
-
-        Args:
-            raw: Complete positive response bytes from the ECU
-                (``raw[0]`` = 0x41, ``raw[1]`` = 0x0C, data at ``raw[2:]``).
-
-        Returns:
-            Engine speed in revolutions per minute as a ``float``.
-        """
+        self._check_length(raw, 0x0C)
         return _pids.PIDS[0x0C].decode(raw)
 
     def decode_coolant_temp(self, raw: bytes) -> float:
-        """Decode Engine Coolant Temperature using the SAE J1979 formula for PID 0x05.
-
-        Args:
-            raw: Complete positive response bytes from the ECU
-                (``raw[0]`` = 0x41, ``raw[1]`` = 0x05, data at ``raw[2:]``).
-
-        Returns:
-            Coolant temperature in degrees Celsius as a ``float``.
-        """
+        self._check_length(raw, 0x05)
         return _pids.PIDS[0x05].decode(raw)
 
     def decode_vehicle_speed(self, raw: bytes) -> float:
-        """Decode Vehicle Speed using the SAE J1979 formula for PID 0x0D.
-
-        Args:
-            raw: Complete positive response bytes from the ECU
-                (``raw[0]`` = 0x41, ``raw[1]`` = 0x0D, data at ``raw[2:]``).
-
-        Returns:
-            Vehicle speed in kilometres per hour as a ``float``.
-        """
+        self._check_length(raw, 0x0D)
         return _pids.PIDS[0x0D].decode(raw)
 
     def decode_throttle_position(self, raw: bytes) -> float:
-        """Decode Throttle Position using the SAE J1979 formula for PID 0x11.
-
-        Args:
-            raw: Complete positive response bytes from the ECU
-                (``raw[0]`` = 0x41, ``raw[1]`` = 0x11, data at ``raw[2:]``).
-
-        Returns:
-            Throttle opening as a percentage (0.0–100.0) as a ``float``.
-        """
+        self._check_length(raw, 0x11)
         return _pids.PIDS[0x11].decode(raw)
 
     def decode_engine_load(self, raw: bytes) -> float:
-        """Decode Calculated Engine Load using the SAE J1979 formula for PID 0x04.
-
-        Args:
-            raw: Complete positive response bytes from the ECU
-                (``raw[0]`` = 0x41, ``raw[1]`` = 0x04, data at ``raw[2:]``).
-
-        Returns:
-            Calculated engine load as a percentage (0.0–100.0) as a ``float``.
-        """
+        self._check_length(raw, 0x04)
         return _pids.PIDS[0x04].decode(raw)
 
     # ------------------------------------------------------------------ #

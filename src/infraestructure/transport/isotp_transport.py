@@ -93,8 +93,8 @@ class IsoTpTransport(ITransport):
         if self._stack is not None:
             raise ConnectionError("IsoTpTransport is already connected.")
         self._bus = can.Bus(channel=self._channel, interface="socketcan")
-        # Drain stale frames that may linger in the kernel socket buffer
-        # from a previous session before handing the bus to the ISO-TP stack.
+        # Drain stale raw CAN frames from the kernel socket buffer left over
+        # from any previous session before handing the bus to the ISO-TP stack.
         while self._bus.recv(timeout=0) is not None:
             pass
         self._stack = isotp.CanStack(
@@ -102,6 +102,9 @@ class IsoTpTransport(ITransport):
             address=self._address,
             params=self._params,
         )
+        # Pump the stack once so it processes any frames already sitting in the
+        # kernel buffer and drain any complete messages that arrive immediately.
+        self._flush_rx()
 
     def disconnect(self) -> None:
         """Shut down the CAN bus and release all associated resources.
@@ -115,14 +118,33 @@ class IsoTpTransport(ITransport):
         self._bus = None
 
     # ------------------------------------------------------------------ #
+    # Internal helpers                                                    #
+    # ------------------------------------------------------------------ #
+
+    def _flush_rx(self) -> None:
+        """Pump the ISO-TP stack and discard any complete messages queued in it.
+
+        Called before every send() so that a stale response from a previous
+        timed-out or error request cannot be mistaken for the reply to the
+        upcoming request.  Also called once after connect() to clear anything
+        that arrived during stack initialisation.
+        """
+        assert self._stack is not None
+        self._stack.process()
+        while self._stack.available():
+            self._stack.recv()   # discard
+            self._stack.process()
+
+    # ------------------------------------------------------------------ #
     # ITransport — I/O                                                    #
     # ------------------------------------------------------------------ #
 
     def send(self, payload: bytes) -> None:
         """Transmit *payload* via ISO-TP and pump the stack until sent.
 
-        Blocks until the ISO-TP layer has finished transmitting all frames
-        (Single Frame or First Frame + Consecutive Frames) for *payload*.
+        Flushes any stale receive data first, then blocks until the ISO-TP
+        layer has finished transmitting all frames (Single Frame or First
+        Frame + Consecutive Frames) for *payload*.
 
         Args:
             payload: OBD-II application payload bytes (no ISO-TP framing).
@@ -133,6 +155,7 @@ class IsoTpTransport(ITransport):
         """
         if self._stack is None:
             raise RuntimeError("Cannot send: IsoTpTransport is not connected.")
+        self._flush_rx()
         self._stack.send(payload)
         while self._stack.transmitting():
             self._stack.process()
