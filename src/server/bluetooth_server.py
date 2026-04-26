@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 
 try:
     from bless import (  # type: ignore[import]
@@ -41,8 +42,10 @@ _NUS_SERVICE = "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
 _NUS_RX      = "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"  # app → Pi (write)
 _NUS_TX      = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"  # Pi → app (notify)
 
-_BLE_NAME = "SEAT_DIAG"
-_MTU      = 512  # bytes máx por notificación; se fragmenta si hay más
+_BLE_NAME           = "SEAT_DIAG"
+_MTU                = 512   # bytes máx por notificación; se fragmenta si hay más
+_CLIENT_TIMEOUT_S   = 15.0  # segundos sin actividad → conexión considerada caída
+_WATCHDOG_INTERVAL  = 5.0   # con qué frecuencia comprueba el watchdog
 
 
 class BLEDiagServer:
@@ -68,6 +71,9 @@ class BLEDiagServer:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._recv_buf: str = ""
         self._stop_event: asyncio.Event | None = None
+        self._last_rx_time: float = 0.0
+        self._client_connected: bool = False
+        self._watchdog_task: asyncio.Task | None = None
 
     # ── Ciclo de vida ──────────────────────────────────────────────────
 
@@ -75,6 +81,7 @@ class BLEDiagServer:
         """Arrancar el servidor BLE. Bloquea hasta KeyboardInterrupt o stop()."""
         self._loop = asyncio.get_event_loop()
         self._stop_event = asyncio.Event()
+        self._last_rx_time = time.time()
 
         self._server = BlessServer(name=_BLE_NAME, loop=self._loop)
         self._server.read_request_func  = self._on_read
@@ -105,11 +112,20 @@ class BLEDiagServer:
         await self._server.start()
         print(f"[BLE] Anunciando '{_BLE_NAME}' — esperando conexión...")
 
+        # Arrancar el watchdog de inactividad
+        self._watchdog_task = asyncio.create_task(self._watchdog_loop())
+
         try:
             await self._stop_event.wait()
         except (KeyboardInterrupt, asyncio.CancelledError):
             pass
         finally:
+            if self._watchdog_task:
+                self._watchdog_task.cancel()
+                try:
+                    await self._watchdog_task
+                except asyncio.CancelledError:
+                    pass
             await self._server.stop()
             self._handler.stop_monitor()
             print("[BLE] Servidor detenido.")
@@ -129,6 +145,12 @@ class BLEDiagServer:
         if characteristic.uuid.upper() != _NUS_RX.upper():
             return
 
+        # Actualizar la marca de actividad del cliente
+        self._last_rx_time = time.time()
+        if not self._client_connected:
+            self._client_connected = True
+            logger.info("[Watchdog] Cliente conectado")
+
         chunk = bytes(value).decode("utf-8", errors="replace")
         self._recv_buf += chunk
 
@@ -145,6 +167,30 @@ class BLEDiagServer:
             # handle() es bloqueante (acceso CAN) → ejecutar en executor
             assert self._loop is not None
             asyncio.ensure_future(self._dispatch_async(cmd), loop=self._loop)
+
+    # ── Watchdog de inactividad ───────────────────────────────────────
+
+    async def _watchdog_loop(self) -> None:
+        """Monitorea inactividad del cliente cada 5 segundos."""
+        try:
+            while True:
+                await asyncio.sleep(_WATCHDOG_INTERVAL)
+                if self._client_connected:
+                    elapsed = time.time() - self._last_rx_time
+                    if elapsed > _CLIENT_TIMEOUT_S:
+                        logger.warning(
+                            f"[Watchdog] Sin actividad por {elapsed:.1f}s — "
+                            f"desconectando cliente"
+                        )
+                        await self._handle_disconnect()
+        except asyncio.CancelledError:
+            pass
+
+    async def _handle_disconnect(self) -> None:
+        """Maneja desconexión por timeout: limpia y notifica handler."""
+        self._client_connected = False
+        self._recv_buf = ""
+        self._handler.on_disconnect()
 
     # ── Despacho y notificación ────────────────────────────────────────
 

@@ -78,6 +78,7 @@ class BtCommandHandler:
             return {"status": "error", "message": "invalid token"}
 
         dispatch = {
+            "ping":            self._ping,
             "snapshot":        self._snapshot,
             "dtcs":            self._dtcs,
             "clear_dtcs":      self._clear_dtcs,
@@ -96,7 +97,11 @@ class BtCommandHandler:
         except Exception as exc:
             return {"status": "error", "message": str(exc)}
 
-    # ── Handlers ───────────────────────────────────────────────────────
+    # ── Handlers ────────────────────────────────────────
+
+    def _ping(self, _cmd: dict) -> dict:
+        """Responder a ping para verificar conectividad."""
+        return {"status": "ok", "data": "pong"}───────────────
 
     def _snapshot(self, _cmd: dict) -> dict:
         data = {}
@@ -230,3 +235,11 @@ class BtCommandHandler:
             if self._monitor is not None:
                 self._monitor.stop()
                 self._monitor = None
+
+    def on_disconnect(self) -> None:
+        """Llamado cuando se detecta desconexión por timeout del watchdog."""
+        # Parar el monitor de datos en vivo
+        self.stop_monitor()
+        # Resetear autenticación si es necesario para la siguiente sesión
+        # (opcional: podrías querer mantener la sesión autenticada)
+        # self._authenticated = (self._auth_token is None)
