@@ -247,8 +247,9 @@ class BLEDiagServer:
 
                 now = time.time()
 
-                # Monitoreo del servidor: ¿sigue enviando notificaciones?
-                if self._server_running:
+                # Monitoreo del servidor: ¿sigue enviando notificaciones? 
+                # (SOLO si hay cliente conectado - de lo contrario puede estar inactivo)
+                if self._server_running and self._client_connected:
                     elapsed_tx = now - self._last_tx_time
                     if elapsed_tx > _SERVER_TIMEOUT_S:
                         logger.error(
