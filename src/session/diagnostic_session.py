@@ -12,6 +12,7 @@ import time
 from types import TracebackType
 
 from config.obd_pids import PIDS
+from core.exceptions import InvalidResponseError
 from core.interfaces.i_data_decoder import IDataDecoder
 from core.interfaces.i_diagnostic_session import IDiagnosticSession
 from core.interfaces.i_protocol_builder import IProtocolBuilder
@@ -246,6 +247,12 @@ class DiagnosticSession(IDiagnosticSession):
             self._transport.send(pid_def.request)
             raw = self._transport.receive()
             self._decoder.validate_response(raw, expected_mode=0x01)
+            if len(raw) < pid_def.response_bytes:
+                raise InvalidResponseError(
+                    f"Response for PID 0x{pid_def.pid:02X} too short: "
+                    f"expected {pid_def.response_bytes} bytes, got {len(raw)}"
+                    f" — raw: {bytes(raw).hex(' ').upper()}"
+                )
             value = pid_def.decode(raw)
             samples.append(
                 MonitorSample(
