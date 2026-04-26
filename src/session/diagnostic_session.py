@@ -242,15 +242,20 @@ class DiagnosticSession(IDiagnosticSession):
             Ordered list of :class:`~core.models.monitor_sample.MonitorSample`
             instances, one per PID, in PID-registry order.
         """
+        _MAX_DRAIN = 10
         samples: list[MonitorSample] = []
         for pid_def in PIDS.values():
             self._transport.send(pid_def.request)
             raw = self._transport.receive()
+            for _ in range(_MAX_DRAIN):
+                if len(raw) < 2 or raw[1] == pid_def.pid:
+                    break
+                raw = self._transport.receive()
             self._decoder.validate_response(raw, expected_mode=0x01)
             if len(raw) >= 2 and raw[1] != pid_def.pid:
                 raise InvalidResponseError(
                     f"PID echo mismatch for 0x{pid_def.pid:02X}: "
-                    f"got 0x{raw[1]:02X} — raw: {bytes(raw).hex(' ').upper()}"
+                    f"got 0x{raw[1]:02X} after draining — raw: {bytes(raw).hex(' ').upper()}"
                 )
             if len(raw) < pid_def.response_bytes:
                 raise InvalidResponseError(

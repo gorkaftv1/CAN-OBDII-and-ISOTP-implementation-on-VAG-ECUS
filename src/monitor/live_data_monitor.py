@@ -33,6 +33,9 @@ class LiveDataMonitor(IDataMonitor):
     """
 
     _JOIN_TIMEOUT_MULTIPLIER = 3.0
+    # Maximum stale frames to discard while searching for the expected PID.
+    # Each discard is near-instant when the frame is already buffered.
+    _MAX_DRAIN = 10
 
     def __init__(
         self,
@@ -113,14 +116,19 @@ class LiveDataMonitor(IDataMonitor):
             with self._lock:
                 self._transport.send(pid_def.request)
                 raw = self._transport.receive()
+                # Drain stale / late-arriving frames from previous requests.
+                # Each receive() here returns instantly if a frame is already
+                # buffered; only blocks up to timeout if the queue is empty.
+                for _ in range(self._MAX_DRAIN):
+                    if len(raw) < 2 or raw[1] == pid_def.pid:
+                        break
+                    raw = self._transport.receive()
             ts = time.monotonic()
             self._decoder.validate_response(raw, expected_mode=0x01)
-            # Verify PID echo — catches response misalignment where the ECU
-            # reply for a previous request arrives on the wrong cycle.
             if len(raw) >= 2 and raw[1] != pid_def.pid:
                 raise InvalidResponseError(
                     f"PID echo mismatch for 0x{pid_def.pid:02X}: "
-                    f"got 0x{raw[1]:02X} — raw: {bytes(raw).hex(' ').upper()}"
+                    f"got 0x{raw[1]:02X} after draining — raw: {bytes(raw).hex(' ').upper()}"
                 )
             if len(raw) < pid_def.response_bytes:
                 raise InvalidResponseError(
