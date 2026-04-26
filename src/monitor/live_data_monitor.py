@@ -8,6 +8,7 @@ import time
 from collections.abc import Callable
 
 from config.obd_pids import PIDS, PidDefinition
+from core.exceptions import InvalidResponseError
 from core.interfaces.i_data_decoder import IDataDecoder
 from core.interfaces.i_data_monitor import IDataMonitor
 from core.interfaces.i_transport import ITransport
@@ -114,6 +115,19 @@ class LiveDataMonitor(IDataMonitor):
                 raw = self._transport.receive()
             ts = time.monotonic()
             self._decoder.validate_response(raw, expected_mode=0x01)
+            # Verify PID echo — catches response misalignment where the ECU
+            # reply for a previous request arrives on the wrong cycle.
+            if len(raw) >= 2 and raw[1] != pid_def.pid:
+                raise InvalidResponseError(
+                    f"PID echo mismatch for 0x{pid_def.pid:02X}: "
+                    f"got 0x{raw[1]:02X} — raw: {bytes(raw).hex(' ').upper()}"
+                )
+            if len(raw) < pid_def.response_bytes:
+                raise InvalidResponseError(
+                    f"Response for PID 0x{pid_def.pid:02X} too short: "
+                    f"expected {pid_def.response_bytes} bytes, got {len(raw)}"
+                    f" — raw: {bytes(raw).hex(' ').upper()}"
+                )
             value = pid_def.decode(raw)
             self._on_sample(
                 MonitorSample(

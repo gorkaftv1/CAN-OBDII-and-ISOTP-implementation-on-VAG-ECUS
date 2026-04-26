@@ -247,6 +247,11 @@ class DiagnosticSession(IDiagnosticSession):
             self._transport.send(pid_def.request)
             raw = self._transport.receive()
             self._decoder.validate_response(raw, expected_mode=0x01)
+            if len(raw) >= 2 and raw[1] != pid_def.pid:
+                raise InvalidResponseError(
+                    f"PID echo mismatch for 0x{pid_def.pid:02X}: "
+                    f"got 0x{raw[1]:02X} — raw: {bytes(raw).hex(' ').upper()}"
+                )
             if len(raw) < pid_def.response_bytes:
                 raise InvalidResponseError(
                     f"Response for PID 0x{pid_def.pid:02X} too short: "
