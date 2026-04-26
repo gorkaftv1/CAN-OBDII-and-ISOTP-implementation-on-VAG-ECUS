@@ -15,8 +15,8 @@ Prerequisitos en la Raspberry Pi:
 from __future__ import annotations
 
 import asyncio
-import sys
 import os
+import sys
 import threading
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -33,11 +33,33 @@ from server.bt_command_handler import BtCommandHandler
 
 _DB_PATH = "diagnostics.db"
 
+# Fichero donde el usuario guarda su token personal (configurable una vez por SSH).
+_TOKEN_FILE = os.path.expanduser("~/.seat_diag_token")
+# Token de fallback si no se configura nada. Cámbialo antes de usar en producción.
+_DEFAULT_TOKEN = "1234"
+
+
+def _load_auth_token() -> str:
+    """Prioridad: variable de entorno → fichero ~/.seat_diag_token → constante."""
+    if token := os.environ.get("BLE_AUTH_TOKEN", "").strip():
+        return token
+    try:
+        token = open(_TOKEN_FILE).read().strip()
+        if token:
+            return token
+    except FileNotFoundError:
+        pass
+    return _DEFAULT_TOKEN
+
 
 async def main() -> None:
     print("╔══════════════════════════════════════════════╗")
     print("║  SEAT Ibiza 6J 2012 — BLE OBD-II Server      ║")
     print("╚══════════════════════════════════════════════╝")
+
+    # ── Token de autenticación BLE ─────────────────────────────────────
+    auth_token = _load_auth_token()
+    print(f"[BLE] Auth token activo (fuente: {'env' if os.environ.get('BLE_AUTH_TOKEN') else _TOKEN_FILE if os.path.exists(_TOKEN_FILE) else 'default'})")
 
     # ── Capa de transporte ─────────────────────────────────────────────
     raw_transport = IsoTpTransport(channel="can0", tx_id=0x7E0, rx_id=0x7E8)
@@ -57,20 +79,19 @@ async def main() -> None:
         inner_session, logger, session_id, log_transport
     )
 
-    # ── Servidor BLE (se crea antes para poder pasar notify al handler) ─
-    ble_server = BLEDiagServer.__new__(BLEDiagServer)
-
+    # ── Handler y servidor BLE ─────────────────────────────────────────
+    # El handler se construye primero sin callback; se inyecta después de
+    # crear el servidor para evitar la dependencia circular.
     handler = BtCommandHandler(
         session=session,
         logger=logger,
         session_id=session_id,
         transport=log_transport,
         transport_lock=transport_lock,
-        push_callback=ble_server.notify,
+        auth_token=auth_token,
     )
-
-    # Inicializar el servidor con el handler ya construido
-    BLEDiagServer.__init__(ble_server, handler)
+    ble_server = BLEDiagServer(handler)
+    handler.set_push_callback(ble_server.notify)
 
     try:
         with session:

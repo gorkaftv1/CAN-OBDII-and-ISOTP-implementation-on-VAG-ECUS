@@ -8,13 +8,16 @@ intent-driven API for every supported OBD-II operation.
 
 from __future__ import annotations
 
+import time
 from types import TracebackType
 
+from config.obd_pids import PIDS
 from core.interfaces.i_data_decoder import IDataDecoder
 from core.interfaces.i_diagnostic_session import IDiagnosticSession
 from core.interfaces.i_protocol_builder import IProtocolBuilder
 from core.interfaces.i_transport import ITransport
 from core.models.dtc import Dtc
+from core.models.monitor_sample import MonitorSample
 
 
 class DiagnosticSession(IDiagnosticSession):
@@ -226,6 +229,34 @@ class DiagnosticSession(IDiagnosticSession):
         self._transport.send(self._builder.build_clear_dtcs_request())
         raw = self._transport.receive()
         self._decoder.validate_response(raw, expected_mode=0x04)
+
+    # ------------------------------------------------------------------ #
+    # All Mode 0x01 PIDs — Snapshot                                       #
+    # ------------------------------------------------------------------ #
+
+    def get_snapshot(self) -> list[MonitorSample]:
+        """Read all 18 registered Mode 0x01 PIDs in a single pass.
+
+        Returns:
+            Ordered list of :class:`~core.models.monitor_sample.MonitorSample`
+            instances, one per PID, in PID-registry order.
+        """
+        samples: list[MonitorSample] = []
+        for pid_def in PIDS.values():
+            self._transport.send(pid_def.request)
+            raw = self._transport.receive()
+            self._decoder.validate_response(raw, expected_mode=0x01)
+            value = pid_def.decode(raw)
+            samples.append(
+                MonitorSample(
+                    pid=pid_def.pid,
+                    name=pid_def.name,
+                    value=value,
+                    unit=pid_def.unit,
+                    timestamp=time.monotonic(),
+                )
+            )
+        return samples
 
     # ------------------------------------------------------------------ #
     # Mode 0x09 — Vehicle Information                                     #

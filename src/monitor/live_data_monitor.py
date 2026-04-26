@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import threading
 import time
 from collections.abc import Callable
@@ -40,6 +41,7 @@ class LiveDataMonitor(IDataMonitor):
         interval_ms: int,
         on_sample: Callable[[MonitorSample], None],
         on_error: Callable[[int, Exception], None] | None = None,
+        lock: threading.Lock | None = None,
     ) -> None:
         if not pid_ids:
             raise ValueError("pid_ids must not be empty")
@@ -54,6 +56,11 @@ class LiveDataMonitor(IDataMonitor):
         self._interval_s = interval_ms / 1000.0
         self._on_sample = on_sample
         self._on_error = on_error
+        # Shared lock for exclusive CAN bus access. Use contextlib.nullcontext
+        # when no lock is needed (e.g. CLI where the monitor is the only user).
+        self._lock: threading.Lock | contextlib.AbstractContextManager = (
+            lock if lock is not None else contextlib.nullcontext()
+        )
 
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
@@ -102,8 +109,9 @@ class LiveDataMonitor(IDataMonitor):
 
     def _poll_single(self, pid_def: PidDefinition) -> None:
         try:
-            self._transport.send(pid_def.request)
-            raw = self._transport.receive()
+            with self._lock:
+                self._transport.send(pid_def.request)
+                raw = self._transport.receive()
             ts = time.monotonic()
             self._decoder.validate_response(raw, expected_mode=0x01)
             value = pid_def.decode(raw)

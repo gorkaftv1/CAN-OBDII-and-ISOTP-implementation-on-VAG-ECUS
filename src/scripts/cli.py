@@ -17,7 +17,6 @@ import time
 # Allow running from the project root without installing as a package.
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from config.obd_pids import PIDS
 from core.exceptions import DiagnosticTimeoutError, InvalidResponseError, NrcException
 from core.models.monitor_sample import MonitorSample
 from infraestructure.decoder.obd2_decoder import Obd2DataDecoder
@@ -70,12 +69,8 @@ def _option_live_data(session: LoggedDiagnosticSession) -> None:
 
 def _option_extended_live_data(session: LoggedDiagnosticSession) -> None:
     print(_SEP)
-    transport = session._transport
-    for pid_def in PIDS.values():
-        transport.send(pid_def.request)
-        raw = transport.receive()
-        value = pid_def.decode(raw)
-        print(f"  {pid_def.name:<30} : {value:>8.2f} {pid_def.unit}")
+    for sample in session.get_snapshot():
+        print(f"  {sample.name:<30} : {sample.value:>8.2f} {sample.unit}")
 
 
 def _option_read_dtcs(session: LoggedDiagnosticSession) -> None:

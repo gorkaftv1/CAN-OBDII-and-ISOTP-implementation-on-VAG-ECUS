@@ -8,6 +8,7 @@ from core.interfaces.i_transport import ITransport
 from core.interfaces.i_protocol_builder import IProtocolBuilder
 from core.interfaces.i_data_decoder import IDataDecoder
 from core.models.dtc import Dtc
+from core.models.monitor_sample import MonitorSample
 from infraestructure.transport.logging_transport import LoggingTransport
 
 
@@ -112,6 +113,11 @@ class LoggedDiagnosticSession(IDiagnosticSession):
     def clear_dtcs(self) -> None:
         self._inner.clear_dtcs()
         self._log("clear_dtcs")
+
+    def get_snapshot(self) -> list[MonitorSample]:
+        result = self._inner.get_snapshot()
+        self._log("get_snapshot")
+        return result
 
     # ── Mode 0x09 ──────────────────────────────────────────────────────
 

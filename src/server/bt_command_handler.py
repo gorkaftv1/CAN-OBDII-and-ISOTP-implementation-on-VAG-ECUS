@@ -23,6 +23,7 @@ class BtCommandHandler:
     Traduce comandos JSON a operaciones diagnósticas.
 
     Comandos soportados:
+        auth              — Autenticación con PIN (obligatorio si se configuró auth_token)
         snapshot          — Lee 18 PIDs de golpe
         dtcs              — Lee DTCs almacenados
         clear_dtcs        — Borra DTCs
@@ -41,22 +42,41 @@ class BtCommandHandler:
         session_id: int,
         transport: ITransport,
         transport_lock: threading.Lock,
-        push_callback,  # Callable[[dict], None] — envía JSON al cliente BT
+        push_callback=None,   # Callable[[dict], None] — envía JSON al cliente BT
+        auth_token: str | None = None,
     ) -> None:
         self._session = session
         self._logger = logger
         self._session_id = session_id
         self._transport = transport
         self._lock = transport_lock
-        self._push = push_callback
+        self._push = push_callback or (lambda _: None)
+
+        # Auth: si auth_token es None la sesión BLE no requiere autenticación.
+        self._auth_token = auth_token
+        self._authenticated = auth_token is None
 
         self._monitor: LiveDataMonitor | None = None
         self._monitor_lock = threading.Lock()
+
+    def set_push_callback(self, cb) -> None:
+        """Inyectar el callback de notificación BLE tras construir el servidor."""
+        self._push = cb
 
     # ── Dispatch ───────────────────────────────────────────────────────
 
     def handle(self, cmd: dict) -> dict:
         name = cmd.get("cmd", "")
+
+        if not self._authenticated:
+            if name != "auth":
+                return {"status": "error", "message": "not authenticated — send {\"cmd\":\"auth\",\"token\":\"<PIN>\"}"}
+            provided = cmd.get("token", "")
+            if provided == self._auth_token:
+                self._authenticated = True
+                return {"status": "ok", "data": "authenticated"}
+            return {"status": "error", "message": "invalid token"}
+
         dispatch = {
             "snapshot":        self._snapshot,
             "dtcs":            self._dtcs,
@@ -135,6 +155,7 @@ class BtCommandHandler:
                 interval_ms=interval_ms,
                 on_sample=on_sample,
                 on_error=on_error,
+                lock=self._lock,
             )
             self._monitor.start()
 
