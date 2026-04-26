@@ -124,12 +124,12 @@ class BLEDiagServer:
     def _on_read(self, characteristic: BlessGATTCharacteristic, **_) -> bytearray:
         return characteristic.value or bytearray()
 
-    def _on_write(self, characteristic: BlessGATTCharacteristic, **_) -> None:
+    def _on_write(self, characteristic: BlessGATTCharacteristic, value: bytearray, **_) -> None:
         """Llamado desde el event loop cuando la app escribe en RX."""
         if characteristic.uuid.upper() != _NUS_RX.upper():
             return
 
-        chunk = (characteristic.value or b"").decode("utf-8", errors="replace")
+        chunk = bytes(value).decode("utf-8", errors="replace")
         self._recv_buf += chunk
 
         while "\n" in self._recv_buf:

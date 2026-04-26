@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from types import TracebackType
 
 from core.interfaces.i_diagnostic_session import IDiagnosticSession

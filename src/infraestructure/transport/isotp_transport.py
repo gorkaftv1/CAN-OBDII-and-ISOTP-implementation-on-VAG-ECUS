@@ -93,6 +93,10 @@ class IsoTpTransport(ITransport):
         if self._stack is not None:
             raise ConnectionError("IsoTpTransport is already connected.")
         self._bus = can.Bus(channel=self._channel, interface="socketcan")
+        # Drain stale frames that may linger in the kernel socket buffer
+        # from a previous session before handing the bus to the ISO-TP stack.
+        while self._bus.recv(timeout=0) is not None:
+            pass
         self._stack = isotp.CanStack(
             self._bus,
             address=self._address,
