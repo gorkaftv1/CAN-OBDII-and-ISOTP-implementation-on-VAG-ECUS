@@ -101,7 +101,7 @@ class BtCommandHandler:
 
     def _ping(self, _cmd: dict) -> dict:
         """Responder a ping para verificar conectividad."""
-        return {"status": "ok", "data": "pong"}───────────────
+        return {"status": "ok", "data": "pong"}
 
     def _snapshot(self, _cmd: dict) -> dict:
         data = {}
