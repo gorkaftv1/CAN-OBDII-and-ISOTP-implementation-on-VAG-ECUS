@@ -1,40 +1,46 @@
 # Python
-*__pycache__*
+__pycache__/
+*.py[cod]
 .venv/
 *.log
 
-# Claude
-*claude*
+# SQLite diagnostic logs (runtime data, not source)
+*.db
+*.db-shm
+*.db-wal
+
+# Secrets / local config
+.env
+.env.local
+.env*.local
+
+# Claude Code local config (not project instructions)
+.claude/
 
 # Node / React Native
 node_modules/
 .npm
 .eslintcache
 *.jsbundle
+*.tsbuildinfo
 
-# Android build artifacts & generated files
-seatDiag/android/build/
-seatDiag/android/.gradle/
-seatDiag/android/app/build/
-seatDiag/android/app/debug/
-seatDiag/android/app/release/
-seatDiag/android/.idea/
-seatDiag/android/local.properties
-seatDiag/android/**/.cxx/
-seatDiag/android/**/generated/
+# Android build artifacts & generated folders
+vehicle-diag/android/
+vehicle-diag/ios/
 
-# APK / AAB / Keystores (except debug keystore committed intentionally)
+# APK / AAB / Keystores
 *.apk
 *.aab
 *.jks
-# Keep: seatDiag/android/app/debug.keystore is intentional in RN templates
+*.p8
+*.p12
+*.key
+*.mobileprovision
 
-# iOS
-seatDiag/ios/Pods/
-seatDiag/ios/build/
-seatDiag/ios/*.xcworkspace/xcuserdata/
-seatDiag/ios/*.xcodeproj/xcuserdata/
-seatDiag/ios/DerivedData/
+# Expo
+.expo/
+dist/
+web-build/
 
 # React Native metro cache
 .metro-health-check*
@@ -54,4 +60,3 @@ Thumbs.db
 # Temporary
 tmp/
 temp/
-.env.local
