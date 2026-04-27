@@ -134,21 +134,29 @@ class BtCommandHandler:
     def _monitor_start(self, cmd: dict) -> dict:
         pids = frozenset(cmd.get("pids", [0x05, 0x04, 0x0C, 0x0D, 0x11]))
         interval_ms = int(cmd.get("interval_ms", 500))
+        cycle_size = len(pids)
 
         with self._monitor_lock:
             if self._monitor is not None and self._monitor.is_running():
                 return {"status": "ok", "data": "monitor already running"}
 
+            # Acumular muestras por ciclo y enviarlas juntas en UNA notificación.
+            # Reduce el tráfico BLE de N notif/ciclo a 1, evitando que iOS bloquee
+            # los writes entrantes (pings) por saturación del enlace de notificaciones.
+            sample_batch: list[dict] = []
+
             def on_sample(s: MonitorSample) -> None:
                 self._logger.log_sample(self._session_id, s)
-                self._push({
-                    "type":  "sample",
+                sample_batch.append({
                     "pid":   s.pid,
                     "name":  s.name,
                     "value": s.value,
                     "unit":  s.unit,
                     "ts":    s.timestamp,
                 })
+                if len(sample_batch) >= cycle_size:
+                    self._push({"type": "samples", "samples": sample_batch.copy()})
+                    sample_batch.clear()
 
             def on_error(pid: int, exc: Exception) -> None:
                 self._push({"type": "error", "pid": pid, "message": str(exc)})
@@ -238,8 +246,8 @@ class BtCommandHandler:
 
     def on_disconnect(self) -> None:
         """Llamado cuando se detecta desconexión por timeout del watchdog."""
-        # Parar el monitor de datos en vivo
         self.stop_monitor()
-        # Resetear autenticación si es necesario para la siguiente sesión
-        # (opcional: podrías querer mantener la sesión autenticada)
-        # self._authenticated = (self._auth_token is None)
+        # Forzar re-autenticación en la próxima sesión BLE.
+        # Sin esto, si _authenticated queda True, la siguiente auth del cliente
+        # llega al dispatch dict donde "auth" no existe → "Unknown command" → bucle.
+        self._authenticated = self._auth_token is None

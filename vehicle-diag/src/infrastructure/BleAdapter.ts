@@ -287,7 +287,13 @@ export class BleAdapter implements IVehicleAdapter {
   }
 
   private dispatch(msg: Record<string, unknown>): void {
-    // Push messages (monitor samples) bypass the request queue
+    // Batch of samples (one notification per cycle — N PIDs bundled together)
+    if (msg.type === 'samples') {
+      const batch = msg.samples as MonitorSample[];
+      batch.forEach((s) => this.sampleCbs.forEach((cb) => cb(s)));
+      return;
+    }
+    // Legacy single sample or error push
     if (msg.type === 'sample' || msg.type === 'error') {
       this.sampleCbs.forEach((cb) => cb(msg as unknown as MonitorSample));
       return;
@@ -354,12 +360,13 @@ export class BleAdapter implements IVehicleAdapter {
     const cmd = data.split('\n')[0];
     
     try {
-      // Chunk into WRITE_CHUNK_BYTES slices and write each with response
+      // NUS usa write-without-response: evita que el ACK ATT bloquee cuando
+      // el peripheral está ocupado enviando notificaciones de monitor.
       for (let offset = 0; offset < bytes.length; offset += WRITE_CHUNK_BYTES) {
         const slice = bytes.subarray(offset, offset + WRITE_CHUNK_BYTES);
         let bin = '';
         for (let i = 0; i < slice.length; i++) bin += String.fromCharCode(slice[i]);
-        await this.device.writeCharacteristicWithResponseForService(
+        await this.device.writeCharacteristicWithoutResponseForService(
           NUS_SERVICE,
           RX_CHAR,
           btoa(bin),
