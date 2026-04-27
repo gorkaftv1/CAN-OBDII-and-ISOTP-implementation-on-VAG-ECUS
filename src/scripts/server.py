@@ -15,11 +15,18 @@ Prerequisitos en la Raspberry Pi:
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import sys
 import threading
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
 
 from infraestructure.decoder.obd2_decoder import Obd2DataDecoder
 from infraestructure.logging.sqlite_logger import SqliteDataLogger

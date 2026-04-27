@@ -92,7 +92,7 @@ class BLEDiagServer:
 
     async def start(self) -> None:
         """Arrancar el servidor BLE. Reconecta automáticamente si falla."""
-        self._loop = asyncio.get_event_loop()
+        self._loop = asyncio.get_running_loop()
         self._stop_event = asyncio.Event()
 
         try:
@@ -196,13 +196,16 @@ class BLEDiagServer:
 
     def _on_write(self, characteristic: BlessGATTCharacteristic, value: bytearray, **_) -> None:
         """Llamado desde el event loop cuando la app escribe en RX."""
-        if characteristic.uuid.upper() != _NUS_RX.upper():
+        rx_uuid = getattr(characteristic, "uuid", "?")
+        if str(rx_uuid).upper() != _NUS_RX.upper():
+            logger.debug(f"[BLE] Write ignorado en UUID inesperado: {rx_uuid}")
             return
 
         # Actualizar la marca de actividad del cliente
         self._last_rx_time = time.time()
         if not self._client_connected:
             self._client_connected = True
+            print("[BLE] Cliente conectado — primera escritura recibida")
             logger.info("[Watchdog] Cliente conectado")
 
         chunk = bytes(value).decode("utf-8", errors="replace")
@@ -236,9 +239,11 @@ class BLEDiagServer:
             # Ignorar ACKs del cliente — no generan respuesta (evita corromper la queue)
             if cmd.get("type") == "heartbeat_ack":
                 continue
+            print(f"[BLE] CMD recibido: {cmd.get('cmd', cmd.get('type', '?'))}")
+            logger.debug(f"[BLE] Dispatching cmd: {cmd}")
             # handle() es bloqueante (acceso CAN) → ejecutar en executor
             assert self._loop is not None
-            asyncio.ensure_future(self._dispatch_async(cmd), loop=self._loop)
+            asyncio.run_coroutine_threadsafe(self._dispatch_async(cmd), self._loop)
 
     # ── Watchdog bidireccional (cliente + servidor) ─────────────────────
 
@@ -305,7 +310,7 @@ class BLEDiagServer:
     # ── Despacho y notificación ────────────────────────────────────────
 
     async def _dispatch_async(self, cmd: dict) -> None:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         response = await loop.run_in_executor(None, self._handler.handle, cmd)
         self._notify_from_loop(response)
 
