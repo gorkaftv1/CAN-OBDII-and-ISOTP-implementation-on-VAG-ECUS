@@ -233,6 +233,9 @@ class BLEDiagServer:
                 logger.warning(f"[BLE] JSON inválido: {exc}")
                 self._notify_from_loop({"status": "error", "message": f"JSON inválido: {exc}"})
                 continue
+            # Ignorar ACKs del cliente — no generan respuesta (evita corromper la queue)
+            if cmd.get("type") == "heartbeat_ack":
+                continue
             # handle() es bloqueante (acceso CAN) → ejecutar en executor
             assert self._loop is not None
             asyncio.ensure_future(self._dispatch_async(cmd), loop=self._loop)
